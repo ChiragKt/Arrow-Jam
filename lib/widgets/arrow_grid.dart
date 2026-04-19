@@ -27,8 +27,8 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    for (final c in _flyCtrl.values) c.dispose();
-    for (final c in _collCtrl.values) c.dispose();
+    for (final c in _flyCtrl.values) { c.dispose(); }
+    for (final c in _collCtrl.values) { c.dispose(); }
     super.dispose();
   }
 
