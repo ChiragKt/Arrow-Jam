@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -6,14 +7,48 @@ import '../models/settings_state.dart';
 import '../themes/app_themes.dart';
 import '../widgets/arrow_grid.dart';
 
-class GameScreen extends StatelessWidget {
+class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
+
+  @override
+  State<GameScreen> createState() => _GameScreenState();
+}
+
+class _GameScreenState extends State<GameScreen> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final gs = context.read<GameState>();
+      if (!gs.gameOver && !gs.levelWon) {
+        gs.tick();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsState>();
     final theme = AppThemes.byId(settings.themeId);
     final gs = context.watch<GameState>();
+
+    // Restart timer when next level starts
+    if (gs.levelWon) {
+      _timer?.cancel();
+    }
 
     return Scaffold(
       body: Container(
@@ -29,55 +64,64 @@ class GameScreen extends StatelessWidget {
             children: [
               Column(
                 children: [
-                  _TopBar(theme: theme, gs: gs),
+                  _buildHUD(theme, gs),
                   Expanded(
                     child: Center(
-                      child: _MazeArea(theme: theme, gs: gs),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: theme.background,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: theme.gridLine, width: 1.5),
+                            boxShadow: theme.isDark
+                                ? [BoxShadow(
+                                    color: theme.accent.withValues(alpha: 0.12),
+                                    blurRadius: 24, spreadRadius: 2)]
+                                : [BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.08),
+                                    blurRadius: 16)],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(13),
+                            child: ArrowGrid(gs: gs, theme: theme, onTap: (_) {}),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  _BottomBar(theme: theme, gs: gs),
+                  _buildLivesBar(theme, gs),
                 ],
               ),
               if (gs.levelWon)
-                _Overlay(
-                  theme: theme,
-                  won: true,
-                  gs: gs,
-                  onAction: () {
-                    gs.nextLevel();
-                  },
-                  onQuit: () => Navigator.pop(context),
-                ),
+                _buildOverlay(theme, gs, won: true),
               if (gs.gameOver)
-                _Overlay(
-                  theme: theme,
-                  won: false,
-                  gs: gs,
-                  onAction: () => gs.startGame(),
-                  onQuit: () => Navigator.pop(context),
-                ),
+                _buildOverlay(theme, gs, won: false),
             ],
           ),
         ),
       ),
     );
   }
-}
 
-class _TopBar extends StatelessWidget {
-  final AppTheme theme;
-  final GameState gs;
-  const _TopBar({required this.theme, required this.gs});
+  Widget _buildHUD(AppTheme theme, GameState gs) {
+    final timeRatio = gs.timeRemaining / gs.difficulty.timeSeconds;
+    final timerColor = timeRatio > 0.5
+        ? theme.accent
+        : timeRatio > 0.25
+            ? const Color(0xFFFFAA00)
+            : Colors.red;
 
-  @override
-  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Row(
         children: [
           // Back
           GestureDetector(
-            onTap: () => Navigator.pop(context),
+            onTap: () {
+              _timer?.cancel();
+              Navigator.pop(context);
+            },
             child: Icon(Icons.close, color: theme.textSecondary, size: 22),
           ),
           const Spacer(),
@@ -86,18 +130,21 @@ class _TopBar extends StatelessWidget {
             'LVL ${gs.level}',
             style: GoogleFonts.spaceMono(
               color: theme.textPrimary,
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: FontWeight.w700,
               letterSpacing: 2,
             ),
           ),
+          const SizedBox(width: 20),
+          // Timer
+          _TimerBadge(seconds: gs.timeRemaining, color: timerColor, theme: theme),
           const Spacer(),
           // Score
           Text(
             '${gs.score}',
             style: GoogleFonts.spaceMono(
               color: theme.accent,
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -105,79 +152,27 @@ class _TopBar extends StatelessWidget {
       ),
     );
   }
-}
 
-class _MazeArea extends StatelessWidget {
-  final AppTheme theme;
-  final GameState gs;
-  const _MazeArea({required this.theme, required this.gs});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildLivesBar(AppTheme theme, GameState gs) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Container(
-        decoration: BoxDecoration(
-          color: theme.background,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: theme.gridLine,
-            width: 1.5,
-          ),
-          boxShadow: theme.isDark
-              ? [
-                  BoxShadow(
-                    color: theme.accent.withValues(alpha: 0.12),
-                    blurRadius: 24,
-                    spreadRadius: 2,
-                  )
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 16,
-                  )
-                ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(11),
-          child: ArrowGrid(
-            gs: gs,
-            theme: theme,
-            onTap: (_) {},
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomBar extends StatelessWidget {
-  final AppTheme theme;
-  final GameState gs;
-  const _BottomBar({required this.theme, required this.gs});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      padding: const EdgeInsets.symmetric(vertical: 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(5, (i) {
+        children: List.generate(gs.difficulty.lives, (i) {
           final alive = i < gs.lives;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 5),
-            child: AnimatedContainer(
+            child: AnimatedScale(
+              scale: alive ? 1.0 : 0.7,
               duration: const Duration(milliseconds: 300),
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
+              child: Icon(
+                alive ? Icons.favorite : Icons.favorite_border,
                 color: alive
                     ? theme.lifeActive
-                    : theme.textSecondary.withValues(alpha: 0.15),
-                boxShadow: alive && theme.isDark
-                    ? [BoxShadow(color: theme.lifeActive.withValues(alpha: 0.5), blurRadius: 8)]
+                    : theme.textSecondary.withValues(alpha: 0.3),
+                size: 26,
+                shadows: alive && theme.isDark
+                    ? [Shadow(color: theme.lifeActive.withValues(alpha: 0.6), blurRadius: 8)]
                     : null,
               ),
             ),
@@ -186,36 +181,19 @@ class _BottomBar extends StatelessWidget {
       ),
     );
   }
-}
 
-class _Overlay extends StatelessWidget {
-  final AppTheme theme;
-  final bool won;
-  final GameState gs;
-  final VoidCallback onAction;
-  final VoidCallback onQuit;
-
-  const _Overlay({
-    required this.theme,
-    required this.won,
-    required this.gs,
-    required this.onAction,
-    required this.onQuit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildOverlay(AppTheme theme, GameState gs, {required bool won}) {
     return Container(
-      color: Colors.black.withValues(alpha: 0.7),
+      color: Colors.black.withValues(alpha: 0.72),
       child: Center(
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 48),
+          margin: const EdgeInsets.symmetric(horizontal: 44),
           padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
             color: theme.cardBg,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: (won ? theme.accent : Colors.red).withValues(alpha: 0.4),
+              color: (won ? theme.accent : Colors.red).withValues(alpha: 0.45),
               width: 1.5,
             ),
           ),
@@ -225,45 +203,57 @@ class _Overlay extends StatelessWidget {
               Text(
                 won ? '✓' : '✕',
                 style: TextStyle(
-                  fontSize: 44,
+                  fontSize: 48,
                   color: won ? theme.accent : Colors.red,
                   fontWeight: FontWeight.w100,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 won ? 'CLEARED' : 'GAME OVER',
                 style: GoogleFonts.spaceMono(
                   color: won ? theme.accent : Colors.red,
-                  fontSize: 18,
+                  fontSize: 17,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 3,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 'Score: ${gs.score}',
                 style: GoogleFonts.spaceMono(
                   color: theme.textSecondary,
-                  fontSize: 13,
+                  fontSize: 12,
                 ),
               ),
-              const SizedBox(height: 24),
-              _Btn(
-                label: won ? 'NEXT LEVEL' : 'TRY AGAIN',
-                color: theme.accent,
-                textDark: !theme.isDark,
-                onTap: onAction,
+              const SizedBox(height: 22),
+              if (won) ...[
+                _overlayBtn(
+                  label: 'NEXT LEVEL',
+                  color: theme.accent,
+                  textDark: !theme.isDark,
+                  theme: theme,
+                  onTap: () {
+                    gs.nextLevel();
+                    _startTimer();
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
+              _overlayBtn(
+                label: won ? 'QUIT' : 'TRY AGAIN',
+                color: won ? Colors.transparent : theme.accent,
+                textDark: !theme.isDark && !won,
+                outlined: won,
                 theme: theme,
-              ),
-              const SizedBox(height: 10),
-              _Btn(
-                label: 'QUIT',
-                color: Colors.transparent,
-                textDark: false,
-                onTap: onQuit,
-                theme: theme,
-                outlined: true,
+                onTap: () {
+                  if (won) {
+                    Navigator.pop(context);
+                  } else {
+                    gs.resetGame();
+                    _startTimer();
+                  }
+                },
               ),
             ],
           ),
@@ -271,45 +261,28 @@ class _Overlay extends StatelessWidget {
       ),
     );
   }
-}
 
-class _Btn extends StatelessWidget {
-  final String label;
-  final Color color;
-  final bool textDark;
-  final bool outlined;
-  final VoidCallback onTap;
-  final AppTheme theme;
-
-  const _Btn({
-    required this.label,
-    required this.color,
-    required this.textDark,
-    required this.onTap,
-    required this.theme,
-    this.outlined = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _overlayBtn({
+    required String label,
+    required Color color,
+    required bool textDark,
+    required AppTheme theme,
+    required VoidCallback onTap,
+    bool outlined = false,
+  }) {
     return SizedBox(
       width: double.infinity,
       height: 46,
       child: outlined
           ? OutlinedButton(
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: theme.textSecondary.withValues(alpha: 0.4)),
+                side: BorderSide(color: theme.textSecondary.withValues(alpha: 0.35)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: onTap,
-              child: Text(
-                label,
-                style: GoogleFonts.spaceMono(
-                  color: theme.textSecondary,
-                  fontSize: 12,
-                  letterSpacing: 2,
-                ),
-              ),
+              child: Text(label,
+                  style: GoogleFonts.spaceMono(
+                      color: theme.textSecondary, fontSize: 12, letterSpacing: 2)),
             )
           : ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -319,15 +292,45 @@ class _Btn extends StatelessWidget {
                 elevation: 0,
               ),
               onPressed: onTap,
-              child: Text(
-                label,
-                style: GoogleFonts.spaceMono(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2,
-                ),
-              ),
+              child: Text(label,
+                  style: GoogleFonts.spaceMono(
+                      fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2)),
             ),
+    );
+  }
+}
+
+class _TimerBadge extends StatelessWidget {
+  final int seconds;
+  final Color color;
+  final AppTheme theme;
+  const _TimerBadge({required this.seconds, required this.color, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.timer_outlined, color: color, size: 13),
+          const SizedBox(width: 4),
+          Text(
+            '${seconds}s',
+            style: GoogleFonts.spaceMono(
+              color: color,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

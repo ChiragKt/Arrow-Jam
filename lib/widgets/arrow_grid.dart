@@ -20,28 +20,25 @@ class ArrowGrid extends StatefulWidget {
 }
 
 class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
-  // Per-arrow animation controllers keyed by arrow id
   final Map<int, AnimationController> _flyCtrl = {};
-  final Map<int, Animation<Offset>> _flyAnim = {};
-  final Map<int, AnimationController> _collCtrl = {};
+  final Map<int, Animation<Offset>> _flySlide = {};
+  final Map<int, Animation<double>> _flyFade = {};
+  final Map<int, AnimationController> _shakeCtrl = {};
 
   @override
   void dispose() {
     for (final c in _flyCtrl.values) { c.dispose(); }
-    for (final c in _collCtrl.values) { c.dispose(); }
+    for (final c in _shakeCtrl.values) { c.dispose(); }
     super.dispose();
   }
 
-  /// Call when an arrow is tapped and cleared — starts fly-out animation
   void _startFly(int id, ArrowDirection dir) {
     _flyCtrl[id]?.dispose();
     final ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 420),
+      duration: const Duration(milliseconds: 400),
     );
-    // Fly offset: move 2 full "grid units" in arrow direction
     const dist = 2.5;
-    Offset begin = Offset.zero;
     Offset end;
     switch (dir) {
       case ArrowDirection.up:    end = const Offset(0, -dist); break;
@@ -49,27 +46,30 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
       case ArrowDirection.left:  end = const Offset(-dist, 0); break;
       case ArrowDirection.right: end = const Offset( dist, 0); break;
     }
-    final anim = Tween<Offset>(begin: begin, end: end).animate(
-      CurvedAnimation(parent: ctrl, curve: Curves.easeIn),
-    );
+    _flySlide[id] = Tween<Offset>(begin: Offset.zero, end: end)
+        .animate(CurvedAnimation(parent: ctrl, curve: Curves.easeIn));
+    _flyFade[id] = Tween<double>(begin: 1.0, end: 0.0)
+        .animate(CurvedAnimation(
+          parent: ctrl,
+          curve: const Interval(0.4, 1.0, curve: Curves.easeOut),
+        ));
     _flyCtrl[id] = ctrl;
-    _flyAnim[id] = anim;
+    ctrl.addListener(() { if (mounted) setState(() {}); });
     ctrl.forward();
-    ctrl.addListener(() => setState(() {}));
   }
 
-  /// Call on collision — shake animation
   void _startShake(int id) {
-    _collCtrl[id]?.dispose();
+    _shakeCtrl[id]?.dispose();
     final ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 60),
     );
-    _collCtrl[id] = ctrl;
+    _shakeCtrl[id] = ctrl;
+    ctrl.addListener(() { if (mounted) setState(() {}); });
     ctrl.repeat(reverse: true);
-    ctrl.addListener(() => setState(() {}));
     Future.delayed(const Duration(milliseconds: 360), () {
       ctrl.stop();
+      ctrl.reset();
       if (mounted) setState(() {});
     });
   }
@@ -87,25 +87,20 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
         final cellSize = totalSize / n;
 
         return Stack(
+          clipBehavior: Clip.none,
           children: [
-            // Grid background
             CustomPaint(
               size: Size(totalSize, totalSize),
               painter: _GridPainter(n: n, lineColor: theme.gridLine),
             ),
-
-            // Arrows
             ...gs.arrows.map((arrow) {
               if (arrow.cleared) {
-                // Still render briefly during fly-out
-                final flyCtrl = _flyCtrl[arrow.id];
-                final flyAnim = _flyAnim[arrow.id];
-                if (flyCtrl == null || !flyCtrl.isAnimating) return const SizedBox.shrink();
-                return _buildArrowTile(arrow, cellSize, theme, flyAnim);
+                final ctrl = _flyCtrl[arrow.id];
+                if (ctrl == null || !ctrl.isAnimating) {
+                  return const SizedBox.shrink();
+                }
               }
-
-              final flyAnim = arrow.animating ? _flyAnim[arrow.id] : null;
-              return _buildArrowTile(arrow, cellSize, theme, flyAnim);
+              return _buildArrowTile(arrow, cellSize, theme);
             }),
           ],
         );
@@ -113,59 +108,60 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildArrowTile(Arrow arrow, double cellSize, AppTheme theme, Animation<Offset>? flyAnim) {
+  Widget _buildArrowTile(Arrow arrow, double cellSize, AppTheme theme) {
     final x = arrow.col * cellSize;
     final y = arrow.row * cellSize;
-    final isShaking = _collCtrl[arrow.id]?.isAnimating ?? false;
-    final shakeVal = isShaking ? (_collCtrl[arrow.id]!.value - 0.5) * 6.0 : 0.0;
-    final opacity = arrow.cleared ? 0.0 : 1.0;
 
-    Widget arrowWidget = GestureDetector(
-      onTap: arrow.cleared || arrow.animating
-          ? null
-          : () {
-              final result = widget.gs.tapArrow(arrow.id, () {
-                if (mounted) setState(() {});
-              });
-              if (result == TapResult.cleared) {
-                _startFly(arrow.id, arrow.direction);
-              } else if (result == TapResult.collision) {
-                _startShake(arrow.id);
-              }
-            },
-      child: SizedBox(
-        width: cellSize,
-        height: cellSize,
-        child: CustomPaint(
-          painter: ArrowPainter(
-            direction: arrow.direction,
-            color: widget.theme.arrowColor(arrow.direction),
-            opacity: opacity,
+    final shakeCtrl = _shakeCtrl[arrow.id];
+    final shakeOffset = (shakeCtrl != null && shakeCtrl.isAnimating)
+        ? (shakeCtrl.value - 0.5) * 8.0
+        : 0.0;
+
+    final flySlide = _flySlide[arrow.id];
+    final flyFade  = _flyFade[arrow.id];
+    final flyCtrl  = _flyCtrl[arrow.id];
+    final isFlying = flyCtrl != null && flyCtrl.isAnimating;
+
+    Offset slideOffset = Offset.zero;
+    if (isFlying && flySlide != null) {
+      final frac = flySlide.value;
+      slideOffset = Offset(frac.dx * cellSize, frac.dy * cellSize);
+    }
+    final opacity = (isFlying && flyFade != null) ? flyFade.value.clamp(0.0, 1.0) : 1.0;
+
+    return Positioned(
+      key: ValueKey(arrow.id),
+      left: x + slideOffset.dx + shakeOffset,
+      top:  y + slideOffset.dy,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: (arrow.cleared || arrow.animating || isFlying)
+            ? null
+            : () {
+                final result = widget.gs.tapArrow(arrow.id, () {
+                  if (mounted) setState(() {});
+                });
+                if (result == TapResult.cleared) {
+                  _startFly(arrow.id, arrow.direction);
+                } else if (result == TapResult.collision) {
+                  _startShake(arrow.id);
+                }
+              },
+        child: Opacity(
+          opacity: opacity,
+          child: SizedBox(
+            width: cellSize,
+            height: cellSize,
+            child: CustomPaint(
+              painter: ArrowPainter(
+                direction: arrow.direction,
+                color: widget.theme.arrowColor(arrow.direction),
+                opacity: 1.0,
+              ),
+            ),
           ),
         ),
       ),
-    );
-
-    if (flyAnim != null) {
-      arrowWidget = SlideTransition(
-        position: flyAnim,
-        child: FadeTransition(
-          opacity: flyAnim.drive(
-            Tween<double>(begin: 1.0, end: 0.0).chain(
-              CurveTween(curve: const Interval(0.5, 1.0)),
-            ),
-          ),
-          child: arrowWidget,
-        ),
-      );
-    }
-
-    return AnimatedPositioned(
-      key: ValueKey(arrow.id),
-      duration: Duration.zero,
-      left: x + shakeVal,
-      top: y,
-      child: arrowWidget,
     );
   }
 }
@@ -173,7 +169,6 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
 class _GridPainter extends CustomPainter {
   final int n;
   final Color lineColor;
-
   _GridPainter({required this.n, required this.lineColor});
 
   @override
@@ -181,7 +176,6 @@ class _GridPainter extends CustomPainter {
     final paint = Paint()
       ..color = lineColor
       ..strokeWidth = 0.8;
-
     final cell = size.width / n;
     for (int i = 0; i <= n; i++) {
       final pos = i * cell;
@@ -191,5 +185,6 @@ class _GridPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GridPainter old) => old.n != n || old.lineColor != lineColor;
+  bool shouldRepaint(_GridPainter old) =>
+      old.n != n || old.lineColor != lineColor;
 }

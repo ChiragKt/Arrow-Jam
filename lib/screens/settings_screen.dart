@@ -29,14 +29,12 @@ class SettingsScreen extends StatelessWidget {
             children: [
               // Header
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 child: Row(
                   children: [
                     GestureDetector(
                       onTap: () => Navigator.pop(context),
-                      child: Icon(Icons.arrow_back_ios,
-                          color: theme.textSecondary, size: 20),
+                      child: Icon(Icons.arrow_back_ios, color: theme.textSecondary, size: 20),
                     ),
                     const SizedBox(width: 16),
                     Text(
@@ -65,8 +63,7 @@ class SettingsScreen extends StatelessWidget {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: AppThemes.all.length,
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 3,
                         childAspectRatio: 1.4,
                         crossAxisSpacing: 10,
@@ -92,15 +89,12 @@ class SettingsScreen extends StatelessWidget {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text(t.emoji,
-                                    style: const TextStyle(fontSize: 22)),
+                                Text(t.emoji, style: const TextStyle(fontSize: 22)),
                                 const SizedBox(height: 4),
                                 Text(
                                   t.name.toUpperCase(),
                                   style: GoogleFonts.spaceMono(
-                                    color: selected
-                                        ? t.accent
-                                        : theme.textSecondary,
+                                    color: selected ? t.accent : theme.textSecondary,
                                     fontSize: 9,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 1,
@@ -126,8 +120,7 @@ class SettingsScreen extends StatelessWidget {
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 18, vertical: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                           decoration: BoxDecoration(
                             color: selected
                                 ? theme.accent.withValues(alpha: 0.12)
@@ -140,8 +133,7 @@ class SettingsScreen extends StatelessWidget {
                           ),
                           child: Row(
                             children: [
-                              Text(d.emoji,
-                                  style: const TextStyle(fontSize: 18)),
+                              Text(d.emoji, style: const TextStyle(fontSize: 18)),
                               const SizedBox(width: 14),
                               Expanded(
                                 child: Column(
@@ -150,9 +142,7 @@ class SettingsScreen extends StatelessWidget {
                                     Text(
                                       d.label.toUpperCase(),
                                       style: GoogleFonts.spaceMono(
-                                        color: selected
-                                            ? theme.accent
-                                            : theme.textPrimary,
+                                        color: selected ? theme.accent : theme.textPrimary,
                                         fontSize: 13,
                                         fontWeight: FontWeight.w700,
                                         letterSpacing: 1,
@@ -170,8 +160,7 @@ class SettingsScreen extends StatelessWidget {
                                 ),
                               ),
                               if (selected)
-                                Icon(Icons.check,
-                                    color: theme.accent, size: 18),
+                                Icon(Icons.check, color: theme.accent, size: 18),
                             ],
                           ),
                         ),
@@ -186,8 +175,7 @@ class SettingsScreen extends StatelessWidget {
                     GestureDetector(
                       onTap: () => settings.toggleSound(),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 18, vertical: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                         decoration: BoxDecoration(
                           color: theme.cardBg,
                           borderRadius: BorderRadius.circular(12),
@@ -196,12 +184,8 @@ class SettingsScreen extends StatelessWidget {
                         child: Row(
                           children: [
                             Icon(
-                              settings.soundEnabled
-                                  ? Icons.volume_up
-                                  : Icons.volume_off,
-                              color: settings.soundEnabled
-                                  ? theme.accent
-                                  : theme.textSecondary,
+                              settings.soundEnabled ? Icons.volume_up : Icons.volume_off,
+                              color: settings.soundEnabled ? theme.accent : theme.textSecondary,
                               size: 20,
                             ),
                             const SizedBox(width: 14),
@@ -217,7 +201,7 @@ class SettingsScreen extends StatelessWidget {
                             Switch(
                               value: settings.soundEnabled,
                               onChanged: (_) => settings.toggleSound(),
-                              activeThumbColor: theme.accent,
+                              activeColor: theme.accent,
                               inactiveThumbColor: theme.textSecondary,
                               inactiveTrackColor: theme.gridLine,
                             ),
@@ -245,12 +229,12 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        text,
-        style: GoogleFonts.spaceMono(
-          color: theme.textSecondary,
-          fontSize: 10,
-          letterSpacing: 3,
-          fontWeight: FontWeight.w700,
-        ),
-      );
+    text,
+    style: GoogleFonts.spaceMono(
+      color: theme.textSecondary,
+      fontSize: 10,
+      letterSpacing: 3,
+      fontWeight: FontWeight.w700,
+    ),
+  );
 }
