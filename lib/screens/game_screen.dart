@@ -1,93 +1,25 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../models/game_state.dart';
-import '../themes/game_themes.dart';
-import '../services/audio_service.dart';
-import '../widgets/maze_painter.dart';
+import '../models/settings_state.dart';
+import '../themes/app_themes.dart';
+import '../widgets/arrow_grid.dart';
 
-class GameScreen extends StatefulWidget {
-  final String themeId;
-  const GameScreen({super.key, required this.themeId});
-  @override
-  State<GameScreen> createState() => _GameScreenState();
-}
-
-class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
-  Timer? _timer;
-  late AnimationController _glowCtrl;
-  late Animation<double> _glow;
-  late AnimationController _overlayCtrl;
-
-  bool _showHint = false;
-  Offset? _dragStart;
-  String? _lastMoveDir;
-
-  @override
-  void initState() {
-    super.initState();
-    _glowCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))
-      ..repeat(reverse: true);
-    _glow = Tween(begin: 0.5, end: 1.0).animate(_glowCtrl);
-
-    _overlayCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<GameState>().startLevel();
-      _startTimer();
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _glowCtrl.dispose();
-    _overlayCtrl.dispose();
-    super.dispose();
-  }
-
-  void _startTimer() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final gs = context.read<GameState>();
-      gs.tick();
-      if (gs.status == GameStatus.won || gs.status == GameStatus.lost) {
-        _timer?.cancel();
-        _overlayCtrl.forward(from: 0);
-        if (gs.status == GameStatus.won) {
-          context.read<AudioService>().playWin();
-        } else {
-          context.read<AudioService>().playLose();
-        }
-      }
-    });
-  }
-
-  GameTheme get _theme => GameThemes.byId(widget.themeId);
-
-  void _handleSwipe(String dir) {
-    final gs = context.read<GameState>();
-    final moved = gs.tryMove(dir);
-    if (moved) {
-      context.read<AudioService>().playMove();
-      setState(() => _lastMoveDir = dir);
-    } else {
-      context.read<AudioService>().playWall();
-    }
-  }
+class GameScreen extends StatelessWidget {
+  const GameScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final theme = _theme;
+    final settings = context.watch<SettingsState>();
+    final theme = AppThemes.byId(settings.themeId);
     final gs = context.watch<GameState>();
 
     return Scaffold(
-      body: AnimatedContainer(
-        duration: const Duration(milliseconds: 400),
+      body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: theme.gradientColors,
+            colors: theme.bgGradient,
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -97,262 +29,122 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             children: [
               Column(
                 children: [
-                  _buildHUD(theme, gs),
-                  Expanded(child: _buildMazeArea(theme, gs)),
-                  _buildControls(theme, gs),
+                  _TopBar(theme: theme, gs: gs),
+                  Expanded(
+                    child: Center(
+                      child: _MazeArea(theme: theme, gs: gs),
+                    ),
+                  ),
+                  _BottomBar(theme: theme, gs: gs),
                 ],
               ),
-              if (gs.status == GameStatus.won || gs.status == GameStatus.lost)
-                _buildOverlay(theme, gs),
+              if (gs.levelWon)
+                _Overlay(
+                  theme: theme,
+                  won: true,
+                  gs: gs,
+                  onAction: () {
+                    gs.nextLevel();
+                  },
+                  onQuit: () => Navigator.pop(context),
+                ),
+              if (gs.gameOver)
+                _Overlay(
+                  theme: theme,
+                  won: false,
+                  gs: gs,
+                  onAction: () => gs.startGame(),
+                  onQuit: () => Navigator.pop(context),
+                ),
             ],
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildHUD(GameTheme theme, GameState gs) {
-    final timeRatio = gs.timeRemaining / gs.currentProfile.timeLimit;
-    final timerColor = timeRatio > 0.5
-        ? theme.uiAccent
-        : timeRatio > 0.25
-            ? Colors.orange
-            : Colors.red;
+class _TopBar extends StatelessWidget {
+  final AppTheme theme;
+  final GameState gs;
+  const _TopBar({required this.theme, required this.gs});
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Row(
         children: [
-          // Back button
+          // Back
           GestureDetector(
             onTap: () => Navigator.pop(context),
-            child: Icon(Icons.arrow_back_ios, color: theme.uiText.withOpacity(0.6), size: 20),
-          ),
-          const SizedBox(width: 12),
-          // Lives
-          Row(
-            children: List.generate(
-              3,
-              (i) => Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Icon(
-                  i < gs.lives ? Icons.favorite : Icons.favorite_border,
-                  color: i < gs.lives ? Colors.redAccent : theme.uiText.withOpacity(0.2),
-                  size: 18,
-                ),
-              ),
-            ),
+            child: Icon(Icons.close, color: theme.textSecondary, size: 22),
           ),
           const Spacer(),
-          // Difficulty label
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: theme.uiAccent.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: theme.uiAccent.withOpacity(0.3)),
-            ),
-            child: Text(
-              gs.currentProfile.label,
-              style: GoogleFonts.rajdhani(color: theme.uiAccent, fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-          ),
-          const SizedBox(width: 10),
           // Level
           Text(
             'LVL ${gs.level}',
-            style: GoogleFonts.orbitron(color: theme.uiText, fontSize: 13, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(width: 12),
-          // Timer
-          _TimerBadge(seconds: gs.timeRemaining, color: timerColor),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMazeArea(GameTheme theme, GameState gs) {
-    if (gs.status == GameStatus.idle) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return GestureDetector(
-      onPanStart: (d) => _dragStart = d.localPosition,
-      onPanEnd: (d) {
-        if (_dragStart == null) return;
-        // Direction determined by velocity, not position delta, for responsiveness
-        final vel = d.velocity.pixelsPerSecond;
-        if (vel.distance < 100) return;
-        String dir;
-        if (vel.dx.abs() > vel.dy.abs()) {
-          dir = vel.dx > 0 ? 'right' : 'left';
-        } else {
-          dir = vel.dy > 0 ? 'down' : 'up';
-        }
-        _handleSwipe(dir);
-        _dragStart = null;
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            decoration: BoxDecoration(
-              color: theme.pathColor,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: theme.wallColor.withOpacity(0.3), width: 1.5),
-              boxShadow: theme.isDark
-                  ? [BoxShadow(color: theme.uiAccent.withOpacity(0.15), blurRadius: 20, spreadRadius: 2)]
-                  : [],
-            ),
-            child: AnimatedBuilder(
-              animation: _glow,
-              builder: (_, __) => CustomPaint(
-                painter: MazePainter(
-                  maze: gs.maze,
-                  playerCol: gs.playerCol,
-                  playerRow: gs.playerRow,
-                  goalCol: gs.goalCol,
-                  goalRow: gs.goalRow,
-                  theme: theme,
-                  glowIntensity: _glow.value,
-                ),
-                child: Container(),
-              ),
+            style: GoogleFonts.spaceMono(
+              color: theme.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 2,
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildControls(GameTheme theme, GameState gs) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 20, top: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
+          const Spacer(),
           // Score
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('SCORE', style: GoogleFonts.orbitron(color: theme.uiText.withOpacity(0.4), fontSize: 9, letterSpacing: 2)),
-              Text('${gs.score}', style: GoogleFonts.orbitron(color: theme.uiAccent, fontSize: 20, fontWeight: FontWeight.w800)),
-            ],
-          ),
-          // D-pad
-          _DPad(theme: theme, onDir: _handleSwipe),
-          // Hint
-          Column(
-            children: [
-              GestureDetector(
-                onTap: () {
-                  setState(() => _showHint = true);
-                  Future.delayed(const Duration(seconds: 2), () {
-                    if (mounted) setState(() => _showHint = false);
-                  });
-                },
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: theme.cardBackground.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: theme.uiAccent.withOpacity(0.3)),
-                  ),
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: _showHint
-                        ? Text(
-                            gs.hintDirection(),
-                            key: const ValueKey('hint'),
-                            style: TextStyle(fontSize: 22, color: theme.goalColor),
-                          )
-                        : Icon(Icons.lightbulb_outline, key: const ValueKey('bulb'), color: theme.uiText.withOpacity(0.5), size: 22),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text('HINT', style: GoogleFonts.orbitron(color: theme.uiText.withOpacity(0.3), fontSize: 9, letterSpacing: 2)),
-            ],
+          Text(
+            '${gs.score}',
+            style: GoogleFonts.spaceMono(
+              color: theme.accent,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildOverlay(GameTheme theme, GameState gs) {
-    final won = gs.status == GameStatus.won;
-    return FadeTransition(
-      opacity: _overlayCtrl,
+class _MazeArea extends StatelessWidget {
+  final AppTheme theme;
+  final GameState gs;
+  const _MazeArea({required this.theme, required this.gs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Container(
-        color: Colors.black.withOpacity(0.75),
-        child: Center(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 40),
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: theme.cardBackground,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: (won ? theme.goalColor : Colors.red).withOpacity(0.5), width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: (won ? theme.goalColor : Colors.red).withOpacity(0.2),
-                  blurRadius: 30,
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(won ? '🎉' : '💀', style: const TextStyle(fontSize: 52)),
-                const SizedBox(height: 12),
-                Text(
-                  won ? 'LEVEL CLEAR!' : 'GAME OVER',
-                  style: GoogleFonts.orbitron(
-                    color: won ? theme.goalColor : Colors.red,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  won ? 'Score: ${gs.score}' : 'Final Score: ${gs.score}',
-                  style: GoogleFonts.rajdhani(color: theme.uiText, fontSize: 16),
-                ),
-                const SizedBox(height: 24),
-                if (won) ...[
-                  _OverlayBtn(
-                    label: 'NEXT LEVEL',
-                    color: theme.goalColor,
-                    textDark: !theme.isDark,
-                    onTap: () {
-                      _overlayCtrl.reverse();
-                      gs.startLevel();
-                      _startTimer();
-                    },
-                  ),
-                  const SizedBox(height: 10),
+        decoration: BoxDecoration(
+          color: theme.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: theme.gridLine,
+            width: 1.5,
+          ),
+          boxShadow: theme.isDark
+              ? [
+                  BoxShadow(
+                    color: theme.accent.withValues(alpha: 0.12),
+                    blurRadius: 24,
+                    spreadRadius: 2,
+                  )
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 16,
+                  )
                 ],
-                _OverlayBtn(
-                  label: won ? 'QUIT' : 'PLAY AGAIN',
-                  color: won ? Colors.transparent : theme.uiAccent,
-                  textDark: false,
-                  outlined: won,
-                  outlineColor: theme.uiText.withOpacity(0.3),
-                  onTap: () {
-                    if (won) {
-                      Navigator.pop(context);
-                    } else {
-                      gs.resetGame();
-                      gs.startLevel();
-                      _overlayCtrl.reverse();
-                      _startTimer();
-                    }
-                  },
-                ),
-              ],
-            ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: ArrowGrid(
+            gs: gs,
+            theme: theme,
+            onTap: (_) {},
           ),
         ),
       ),
@@ -360,111 +152,181 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 }
 
-class _TimerBadge extends StatelessWidget {
-  final int seconds;
-  final Color color;
-  const _TimerBadge({required this.seconds, required this.color});
+class _BottomBar extends StatelessWidget {
+  final AppTheme theme;
+  final GameState gs;
+  const _BottomBar({required this.theme, required this.gs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(5, (i) {
+          final alive = i < gs.lives;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: alive
+                    ? theme.lifeActive
+                    : theme.textSecondary.withValues(alpha: 0.15),
+                boxShadow: alive && theme.isDark
+                    ? [BoxShadow(color: theme.lifeActive.withValues(alpha: 0.5), blurRadius: 8)]
+                    : null,
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+class _Overlay extends StatelessWidget {
+  final AppTheme theme;
+  final bool won;
+  final GameState gs;
+  final VoidCallback onAction;
+  final VoidCallback onQuit;
+
+  const _Overlay({
+    required this.theme,
+    required this.won,
+    required this.gs,
+    required this.onAction,
+    required this.onQuit,
+  });
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.timer_outlined, color: color, size: 14),
-          const SizedBox(width: 4),
-          Text(
-            '${seconds}s',
-            style: GoogleFonts.orbitron(color: color, fontSize: 13, fontWeight: FontWeight.w700),
+      color: Colors.black.withValues(alpha: 0.7),
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 48),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: theme.cardBg,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: (won ? theme.accent : Colors.red).withValues(alpha: 0.4),
+              width: 1.5,
+            ),
           ),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                won ? '✓' : '✕',
+                style: TextStyle(
+                  fontSize: 44,
+                  color: won ? theme.accent : Colors.red,
+                  fontWeight: FontWeight.w100,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                won ? 'CLEARED' : 'GAME OVER',
+                style: GoogleFonts.spaceMono(
+                  color: won ? theme.accent : Colors.red,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 3,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Score: ${gs.score}',
+                style: GoogleFonts.spaceMono(
+                  color: theme.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 24),
+              _Btn(
+                label: won ? 'NEXT LEVEL' : 'TRY AGAIN',
+                color: theme.accent,
+                textDark: !theme.isDark,
+                onTap: onAction,
+                theme: theme,
+              ),
+              const SizedBox(height: 10),
+              _Btn(
+                label: 'QUIT',
+                color: Colors.transparent,
+                textDark: false,
+                onTap: onQuit,
+                theme: theme,
+                outlined: true,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class _DPad extends StatelessWidget {
-  final GameTheme theme;
-  final void Function(String) onDir;
-  const _DPad({required this.theme, required this.onDir});
-
-  Widget _btn(IconData icon, String dir) {
-    return GestureDetector(
-      onTap: () => onDir(dir),
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: theme.cardBackground.withOpacity(0.6),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: theme.uiAccent.withOpacity(0.25)),
-        ),
-        child: Icon(icon, color: theme.uiText.withOpacity(0.8), size: 22),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _btn(Icons.keyboard_arrow_up, 'up'),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            _btn(Icons.keyboard_arrow_left, 'left'),
-            const SizedBox(width: 4),
-            Container(width: 44, height: 44),
-            const SizedBox(width: 4),
-            _btn(Icons.keyboard_arrow_right, 'right'),
-          ],
-        ),
-        const SizedBox(height: 4),
-        _btn(Icons.keyboard_arrow_down, 'down'),
-      ],
-    );
-  }
-}
-
-class _OverlayBtn extends StatelessWidget {
+class _Btn extends StatelessWidget {
   final String label;
   final Color color;
-  final bool textDark, outlined;
-  final Color? outlineColor;
+  final bool textDark;
+  final bool outlined;
   final VoidCallback onTap;
-  const _OverlayBtn({
-    required this.label, required this.color, required this.textDark,
-    required this.onTap, this.outlined = false, this.outlineColor,
+  final AppTheme theme;
+
+  const _Btn({
+    required this.label,
+    required this.color,
+    required this.textDark,
+    required this.onTap,
+    required this.theme,
+    this.outlined = false,
   });
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 48,
+      height: 46,
       child: outlined
           ? OutlinedButton(
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: outlineColor ?? Colors.white30),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                side: BorderSide(color: theme.textSecondary.withValues(alpha: 0.4)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: onTap,
-              child: Text(label, style: GoogleFonts.orbitron(color: Colors.white70, fontSize: 13, letterSpacing: 2)),
+              child: Text(
+                label,
+                style: GoogleFonts.spaceMono(
+                  color: theme.textSecondary,
+                  fontSize: 12,
+                  letterSpacing: 2,
+                ),
+              ),
             )
           : ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: color,
                 foregroundColor: textDark ? Colors.black : Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
               ),
               onPressed: onTap,
-              child: Text(label, style: GoogleFonts.orbitron(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 2)),
+              child: Text(
+                label,
+                style: GoogleFonts.spaceMono(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2,
+                ),
+              ),
             ),
     );
   }

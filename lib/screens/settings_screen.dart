@@ -1,182 +1,240 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../services/audio_service.dart';
-import '../themes/game_themes.dart';
+import '../models/settings_state.dart';
+import '../models/game_state.dart';
+import '../themes/app_themes.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final audio = context.watch<AudioService>();
-    final theme = GameThemes.all[0]; // Use neon as settings UI theme
+    final settings = context.watch<SettingsState>();
+    final gs = context.watch<GameState>();
+    final theme = AppThemes.byId(settings.themeId);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A1A),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white70),
-          onPressed: () => Navigator.pop(context),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: theme.bgGradient,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
         ),
-        title: Text(
-          'SETTINGS',
-          style: GoogleFonts.orbitron(color: Colors.white, fontSize: 16, letterSpacing: 4),
-        ),
-        centerTitle: true,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          _SectionHeader('AUDIO'),
-          _ToggleTile(
-            icon: Icons.music_note,
-            label: 'Background Music',
-            subtitle: 'Play ambient music during game',
-            value: audio.musicEnabled,
-            accentColor: const Color(0xFF00FFFF),
-            onChanged: (_) => audio.toggleMusic(),
-          ),
-          _ToggleTile(
-            icon: Icons.volume_up,
-            label: 'Sound Effects',
-            subtitle: 'Play sounds for moves and events',
-            value: audio.sfxEnabled,
-            accentColor: const Color(0xFF00FFFF),
-            onChanged: (_) => audio.toggleSfx(),
-          ),
-          const SizedBox(height: 24),
-          _SectionHeader('HOW TO PLAY'),
-          _InfoCard(
-            icon: '👆',
-            title: 'Swipe to Move',
-            body: 'Swipe in any direction to move your dot through the maze.',
-          ),
-          _InfoCard(
-            icon: '🎯',
-            title: 'Reach the Goal',
-            body: 'Navigate to the glowing goal dot before the timer runs out.',
-          ),
-          _InfoCard(
-            icon: '🧠',
-            title: 'Adaptive Difficulty',
-            body: 'Solve fast and the maze grows harder. Take your time and it eases up.',
-          ),
-          _InfoCard(
-            icon: '💡',
-            title: 'Hint Arrow',
-            body: 'Tap the hint button for a direction arrow pointing toward the goal.',
-          ),
-          _InfoCard(
-            icon: '❤️',
-            title: 'Lives',
-            body: 'You have 3 lives. Running out of time costs one life.',
-          ),
-          const SizedBox(height: 32),
-          Center(
-            child: Text(
-              'Arrow Jam v2.0',
-              style: GoogleFonts.orbitron(
-                color: Colors.white24,
-                fontSize: 11,
-                letterSpacing: 2,
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Icon(Icons.arrow_back_ios, color: theme.textSecondary, size: 20),
+                    ),
+                    const SizedBox(width: 16),
+                    Text(
+                      'SETTINGS',
+                      style: GoogleFonts.spaceMono(
+                        color: theme.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 3,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  children: [
+                    const SizedBox(height: 8),
+
+                    // ── Theme ──────────────────────────────────
+                    _SectionLabel('THEME', theme),
+                    const SizedBox(height: 12),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: AppThemes.all.length,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        childAspectRatio: 1.4,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                      ),
+                      itemBuilder: (_, i) {
+                        final t = AppThemes.all[i];
+                        final selected = t.id == settings.themeId;
+                        return GestureDetector(
+                          onTap: () => settings.setTheme(t.id),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? t.accent.withValues(alpha: 0.15)
+                                  : theme.cardBg,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: selected ? t.accent : theme.gridLine,
+                                width: selected ? 2 : 1,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(t.emoji, style: const TextStyle(fontSize: 22)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  t.name.toUpperCase(),
+                                  style: GoogleFonts.spaceMono(
+                                    color: selected ? t.accent : theme.textSecondary,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // ── Difficulty ─────────────────────────────
+                    _SectionLabel('DIFFICULTY', theme),
+                    const SizedBox(height: 12),
+                    ...List.generate(kDifficulties.length, (i) {
+                      final d = kDifficulties[i];
+                      final selected = gs.difficultyIndex == i;
+                      return GestureDetector(
+                        onTap: () => gs.setDifficulty(i),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? theme.accent.withValues(alpha: 0.12)
+                                : theme.cardBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: selected ? theme.accent : theme.gridLine,
+                              width: selected ? 1.5 : 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(d.emoji, style: const TextStyle(fontSize: 18)),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      d.label.toUpperCase(),
+                                      style: GoogleFonts.spaceMono(
+                                        color: selected ? theme.accent : theme.textPrimary,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${d.gridSize}×${d.gridSize} grid  •  ${d.arrowCount} arrows  •  ${d.lives} lives',
+                                      style: GoogleFonts.spaceMono(
+                                        color: theme.textSecondary,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (selected)
+                                Icon(Icons.check, color: theme.accent, size: 18),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+
+                    const SizedBox(height: 28),
+
+                    // ── Sound ──────────────────────────────────
+                    _SectionLabel('SOUND', theme),
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: () => settings.toggleSound(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: theme.cardBg,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: theme.gridLine),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              settings.soundEnabled ? Icons.volume_up : Icons.volume_off,
+                              color: settings.soundEnabled ? theme.accent : theme.textSecondary,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Text(
+                                'Sound Effects',
+                                style: GoogleFonts.spaceMono(
+                                  color: theme.textPrimary,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            Switch(
+                              value: settings.soundEnabled,
+                              onChanged: (_) => settings.toggleSound(),
+                              activeColor: theme.accent,
+                              inactiveThumbColor: theme.textSecondary,
+                              inactiveTrackColor: theme.gridLine,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 40),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _SectionHeader extends StatelessWidget {
+class _SectionLabel extends StatelessWidget {
   final String text;
-  const _SectionHeader(this.text);
+  final AppTheme theme;
+  const _SectionLabel(this.text, this.theme);
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Text(
-      text,
-      style: GoogleFonts.orbitron(
-        color: const Color(0xFF00FFFF).withOpacity(0.6),
-        fontSize: 11,
-        letterSpacing: 3,
-      ),
+  Widget build(BuildContext context) => Text(
+    text,
+    style: GoogleFonts.spaceMono(
+      color: theme.textSecondary,
+      fontSize: 10,
+      letterSpacing: 3,
+      fontWeight: FontWeight.w700,
     ),
   );
-}
-
-class _ToggleTile extends StatelessWidget {
-  final IconData icon;
-  final String label, subtitle;
-  final bool value;
-  final Color accentColor;
-  final ValueChanged<bool> onChanged;
-  const _ToggleTile({
-    required this.icon, required this.label, required this.subtitle,
-    required this.value, required this.accentColor, required this.onChanged,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF12122A),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accentColor.withOpacity(0.15)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: value ? accentColor : Colors.white24, size: 22),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-              Text(subtitle, style: GoogleFonts.rajdhani(color: Colors.white38, fontSize: 12)),
-            ]),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: accentColor,
-            inactiveThumbColor: Colors.white24,
-            inactiveTrackColor: Colors.white10,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoCard extends StatelessWidget {
-  final String icon, title, body;
-  const _InfoCard({required this.icon, required this.title, required this.body});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F0F20),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(icon, style: const TextStyle(fontSize: 22)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 2),
-              Text(body, style: GoogleFonts.rajdhani(color: Colors.white54, fontSize: 13)),
-            ]),
-          ),
-        ],
-      ),
-    );
-  }
 }
