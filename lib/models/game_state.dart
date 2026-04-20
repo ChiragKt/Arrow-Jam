@@ -31,6 +31,7 @@ class Arrow {
     required this.col,
     required this.row,
     required this.direction,
+<<<<<<< HEAD
     required this.length,
     this.cleared  = false,
     this.animating = false,
@@ -51,6 +52,24 @@ class Arrow {
       }
     }
     return result;
+=======
+    this.cleared   = false,
+    this.animating = false,
+  });
+
+  Arrow copyWith({
+    int? col, int? row, ArrowDirection? direction,
+    bool? cleared, bool? animating,
+  }) {
+    return Arrow(
+      id:        id,
+      col:       col       ?? this.col,
+      row:       row       ?? this.row,
+      direction: direction ?? this.direction,
+      cleared:   cleared   ?? this.cleared,
+      animating: animating ?? this.animating,
+    );
+>>>>>>> 37eefb2 (bug fixes)
   }
 
   Arrow copyWith({bool? cleared, bool? animating}) => Arrow(
@@ -69,6 +88,10 @@ class Difficulty {
   final String label;
   final String emoji;
   final int    gridSize;
+<<<<<<< HEAD
+=======
+  final int    arrowCount;
+>>>>>>> 37eefb2 (bug fixes)
   final int    lives;
   final int    timeSeconds;
 
@@ -106,6 +129,7 @@ class GameState extends ChangeNotifier {
   bool _isAnimating   = false;
   int  _timeRemaining = 60;
 
+<<<<<<< HEAD
   List<Arrow> _arrows = [];
   final Random _rng   = Random();
   late Difficulty _activeDifficulty;
@@ -129,6 +153,41 @@ class GameState extends ChangeNotifier {
   GameState() { _activeDifficulty = kDifficulties[1]; }
 
   // ── public API ───────────────────────────────────────────────────────────
+=======
+  // Incremented every time startGame() / resetGame() is called so that
+  // ArrowGrid can detect a full reset even when _level returns to 1.
+  int _generation = 0;
+
+  List<Arrow>  _arrows = [];
+  final Random _rng    = Random();
+
+  late Difficulty _activeDifficulty;
+
+  // ── Getters ──────────────────────────────────────────────────────────────
+
+  int        get difficultyIndex    => _difficultyIndex;
+  bool       get randomDifficulty   => _randomDifficulty;
+  Difficulty get difficulty         => _activeDifficulty;
+  Difficulty get selectedDifficulty => _difficultyIndex < 0
+      ? kDifficulties[1]
+      : kDifficulties[_difficultyIndex];
+  int        get lives              => _lives;
+  int        get level              => _level;
+  int        get score              => _score;
+  bool       get gameOver           => _gameOver;
+  bool       get levelWon           => _levelWon;
+  bool       get isAnimating        => _isAnimating;
+  List<Arrow>get arrows             => _arrows;
+  int        get gridSize           => _activeDifficulty.gridSize;
+  int        get timeRemaining      => _timeRemaining;
+  int        get generation         => _generation;
+
+  GameState() {
+    _activeDifficulty = kDifficulties[1];
+  }
+>>>>>>> 37eefb2 (bug fixes)
+
+  // ── Settings ─────────────────────────────────────────────────────────────
 
   void setRandomDifficulty(bool value) {
     _randomDifficulty = value;
@@ -137,29 +196,62 @@ class GameState extends ChangeNotifier {
   }
 
   void setDifficulty(int index) {
-    _difficultyIndex = index.clamp(0, kDifficulties.length - 1);
+    _difficultyIndex  = index.clamp(0, kDifficulties.length - 1);
     _randomDifficulty = false;
     notifyListeners();
   }
 
+  // ── Game flow ─────────────────────────────────────────────────────────────
+
   void startGame() {
+<<<<<<< HEAD
     _level       = 1;
     _score       = 0;
     _gameOver    = false;
     _levelWon    = false;
     _isAnimating = false;
+=======
+    _generation++;          // <-- signals ArrowGrid to wipe all controllers
+    _level        = 1;
+    _score        = 0;
+    _gameOver     = false;
+    _levelWon     = false;
+    _isAnimating  = false;
+>>>>>>> 37eefb2 (bug fixes)
     _resolveDifficulty();
     _lives = _activeDifficulty.lives;
     _generateLevel();
     notifyListeners();
   }
 
+<<<<<<< HEAD
+=======
+  void _resolveDifficulty() {
+    if (_randomDifficulty) {
+      _activeDifficulty = kDifficulties[_rng.nextInt(kDifficulties.length)];
+    } else {
+      _activeDifficulty =
+          kDifficulties[_difficultyIndex.clamp(0, kDifficulties.length - 1)];
+    }
+  }
+
+>>>>>>> 37eefb2 (bug fixes)
   void tick() {
     if (_gameOver || _levelWon) return;
     if (_timeRemaining <= 0) {
       _lives--;
+<<<<<<< HEAD
       if (_lives <= 0) { _lives = 0; _gameOver = true; }
       else { _generateLevel(); }
+=======
+      if (_lives <= 0) {
+        _lives   = 0;
+        _gameOver = true;
+      } else {
+        _generation++;      // retry = new generation so controllers are cleared
+        _generateLevel();
+      }
+>>>>>>> 37eefb2 (bug fixes)
       notifyListeners();
       return;
     }
@@ -228,6 +320,7 @@ class GameState extends ChangeNotifier {
   }
 
   void _generateLevel() {
+<<<<<<< HEAD
     final size = _activeDifficulty.gridSize;
     _arrows = _buildGrid(size);
     _timeRemaining = (_activeDifficulty.timeSeconds - (_level - 1) * 3)
@@ -241,6 +334,55 @@ class GameState extends ChangeNotifier {
 
   bool _canClearNow(Arrow arrow) {
     final size = _activeDifficulty.gridSize;
+=======
+    final int size  = _activeDifficulty.gridSize;
+    final int count = (_activeDifficulty.arrowCount + (_level - 1))
+        .clamp(_activeDifficulty.arrowCount, size * size - 1);
+    _arrows        = _buildSolvableArrows(size, count);
+    _timeRemaining = (_activeDifficulty.timeSeconds - (_level - 1) * 3)
+        .clamp(15, _activeDifficulty.timeSeconds);
+  }
+
+  // ── Arrow generation ──────────────────────────────────────────────────────
+
+  List<Arrow> _buildSolvableArrows(int size, int count) {
+    for (int attempt = 0; attempt < 300; attempt++) {
+      final arrows = _randomArrows(size, count);
+      if (_hasFreeArrow(arrows, size)) return arrows;
+    }
+    return _guaranteedArrows(size, count);
+  }
+
+  List<Arrow> _randomArrows(int size, int count) {
+    final occupied = <String>{};
+    final list     = <Arrow>[];
+    int id = 0, tries = 0;
+    while (list.length < count && tries < 1000) {
+      tries++;
+      final int col = _rng.nextInt(size);
+      final int row = _rng.nextInt(size);
+      final key = '$col,$row';
+      if (occupied.contains(key)) continue;
+      occupied.add(key);
+      list.add(Arrow(
+        id:        id++,
+        col:       col,
+        row:       row,
+        direction: ArrowDirection.values[_rng.nextInt(4)],
+      ));
+    }
+    return list;
+  }
+
+  bool _hasFreeArrow(List<Arrow> arrows, int size) {
+    for (final a in arrows) {
+      if (_canClear(a, arrows, size)) return true;
+    }
+    return false;
+  }
+
+  bool _canClear(Arrow arrow, List<Arrow> all, int size) {
+>>>>>>> 37eefb2 (bug fixes)
     int c = arrow.col, r = arrow.row;
     while (true) {
       switch (arrow.direction) {
@@ -282,6 +424,7 @@ class GameState extends ChangeNotifier {
       final result = _tryBuildGrid(size);
       if (result != null) return result;
     }
+<<<<<<< HEAD
     return _fallbackGrid(size);
   }
 
@@ -388,6 +531,74 @@ class GameState extends ChangeNotifier {
     if (!_isSolvable(arrows, size)) return null;
 
     return arrows;
+=======
+    final occupied = {for (final a in list) '${a.col},${a.row}'};
+    int tries = 0;
+    while (list.length < count && tries < 500) {
+      tries++;
+      final int c = _rng.nextInt(size);
+      final int r = _rng.nextInt(size);
+      final key = '$c,$r';
+      if (occupied.contains(key)) continue;
+      occupied.add(key);
+      list.add(Arrow(
+        id:        id++,
+        col:       c,
+        row:       r,
+        direction: ArrowDirection.values[_rng.nextInt(4)],
+      ));
+    }
+    return list;
+  }
+
+  // ── Tap handling ──────────────────────────────────────────────────────────
+
+  TapResult tapArrow(int arrowId, void Function() onAnimationDone) {
+    if (_isAnimating)              return TapResult.invalid;
+    if (_gameOver || _levelWon)    return TapResult.invalid;
+
+    final int idx = _arrows.indexWhere((a) => a.id == arrowId);
+    if (idx == -1)                 return TapResult.invalid;
+
+    final arrow = _arrows[idx];
+    if (arrow.cleared || arrow.animating) return TapResult.invalid;
+
+    final int    size      = _activeDifficulty.gridSize;
+    final Arrow? collision = _findCollision(arrow, size);
+
+    if (collision != null) {
+      _lives--;
+      if (_lives <= 0) {
+        _lives    = 0;
+        _gameOver = true;
+      }
+      notifyListeners();
+      return TapResult.collision;
+    }
+
+    // Clear path — animate out
+    _isAnimating   = true;
+    _arrows[idx]   = arrow.copyWith(animating: true);
+    notifyListeners();
+
+    Future.delayed(const Duration(milliseconds: 450), () {
+      final int i2 = _arrows.indexWhere((a) => a.id == arrowId);
+      if (i2 != -1) {
+        _arrows[i2] = _arrows[i2].copyWith(animating: false, cleared: true);
+      }
+      _isAnimating  = false;
+      _score       += 10;
+
+      if (_arrows.every((a) => a.cleared)) {
+        _levelWon  = true;
+        _score    += 50 + (_level * 20);
+      }
+      notifyListeners();
+      onAnimationDone();
+    });
+
+    return TapResult.cleared;
+>>>>>>> 37eefb2 (bug fixes)
   }
 
   // ─── Solvability simulation ───────────────────────────────────────────────
@@ -421,6 +632,7 @@ class GameState extends ChangeNotifier {
         case ArrowDirection.left:  c--; break;
         case ArrowDirection.right: c++; break;
       }
+<<<<<<< HEAD
       if (c < 0 || c >= size || r < 0 || r >= size) return true;
       // Any uncleared arrow body at (c, r)?
       for (int i = 0; i < all.length; i++) {
@@ -447,6 +659,19 @@ class GameState extends ChangeNotifier {
       ));
     }
     return arrows;
+=======
+      if (c < 0 || c >= size || r < 0 || r >= size) return null;
+      final Arrow? hit =
+          _arrows.where((a) => !a.cleared && a.col == c && a.row == r).firstOrNull;
+      if (hit != null) return hit;
+    }
+  }
+
+  void resetGame() {
+    _gameOver = false;
+    _levelWon = false;
+    startGame(); // startGame() increments _generation
+>>>>>>> 37eefb2 (bug fixes)
   }
 }
 
