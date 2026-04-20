@@ -2,16 +2,11 @@ import 'package:flutter/material.dart';
 import '../models/game_state.dart';
 import '../themes/app_themes.dart';
 
-/// Paints one multi-cell snake arrow.
+/// Paints one multi-cell snake arrow on a full-grid canvas.
 ///
-/// The canvas covers the ENTIRE grid (totalSize × totalSize).
-/// All drawing coordinates are computed from [cellSize] and the arrow's
-/// [cells] list, so the snake correctly spans multiple cells.
-///
-/// Drawing:
-///  • A translucent rounded-rect "pill" behind every cell the snake occupies
-///  • A polyline through the centre of each cell (tail → head)
-///  • An arrowhead at the head, offset slightly outward in [direction]
+/// The shaft visits every cell centre (tail → head), then pushes
+/// slightly past the head to form the arrowhead tip — so corners
+/// are always drawn and the head is never skipped.
 class SnakeArrowPainter extends CustomPainter {
   final Arrow  arrow;
   final Color  color;
@@ -30,100 +25,88 @@ class SnakeArrowPainter extends CustomPainter {
     cell.row * cellSize + cellSize * 0.5,
   );
 
-  Offset _dirOffset(ArrowDirection d, double len) => switch (d) {
-    ArrowDirection.up    => Offset(0, -len),
-    ArrowDirection.down  => Offset(0,  len),
-    ArrowDirection.left  => Offset(-len, 0),
-    ArrowDirection.right => Offset( len, 0),
+  Offset _dirVec(ArrowDirection d) => switch (d) {
+    ArrowDirection.up    => const Offset(0, -1),
+    ArrowDirection.down  => const Offset(0,  1),
+    ArrowDirection.left  => const Offset(-1, 0),
+    ArrowDirection.right => const Offset( 1, 0),
   };
 
   @override
   void paint(Canvas canvas, Size size) {
     if (opacity <= 0) return;
 
-    final sw = (cellSize * 0.12).clamp(2.0, 8.0);
-    final hw = cellSize * 0.17;
-    final hl = cellSize * 0.22;
+    final sw       = (cellSize * 0.12).clamp(2.0, 8.0);
+    final wingHalf = sw * 1.8;   // perpendicular spread of wing tips
+    final wingBack = sw * 2.2;   // how far back the wings sit from tip
+    final tipPush  = cellSize * 0.22; // tip extends past head centre
 
-    // ── Background pill per cell ──────────────────────────────────────────
-    final bgPaint = Paint()
-      ..color = color.withValues(alpha: (opacity * 0.20).clamp(0.0, 1.0))
-      ..style = PaintingStyle.fill;
-    final pad = cellSize * 0.08;
-    final rr  = Radius.circular(cellSize * 0.20);
-    for (final cell in arrow.cells) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(
-            cell.col * cellSize + pad,
-            cell.row * cellSize + pad,
-            cellSize - pad * 2,
-            cellSize - pad * 2,
-          ),
-          rr,
-        ),
-        bgPaint,
-      );
-    }
+    final dirVec     = _dirVec(arrow.direction);
+    final headCentre = _centre(arrow.cells.last);
+    // Tip is pushed outward from the head cell centre
+    final tip = Offset(
+      headCentre.dx + dirVec.dx * tipPush,
+      headCentre.dy + dirVec.dy * tipPush,
+    );
 
-    // ── Shaft polyline ────────────────────────────────────────────────────
+    // ── Shaft: tail centre → every cell centre → tip ──────────────────────
+    // We go through ALL cell centres including the head, then continue to tip.
+    // This ensures corners are never skipped.
     final linePaint = Paint()
-      ..color      = color.withValues(alpha: opacity)
+      ..color       = color.withValues(alpha: opacity)
       ..strokeWidth = sw
-      ..strokeCap  = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style      = PaintingStyle.stroke;
+      ..strokeCap   = StrokeCap.round
+      ..strokeJoin  = StrokeJoin.round
+      ..style       = PaintingStyle.stroke;
 
+    final path = Path();
     if (arrow.cells.length == 1) {
-      // Single-cell: stub from centre toward tail side
-      final centre  = _centre(arrow.cells.first);
-      final tailOff = _dirOffset(arrow.direction, -cellSize * 0.22); // opposite dir
-      canvas.drawLine(centre + tailOff, centre, linePaint);
+      // Single cell: short stub behind head, then to tip
+      final behind = Offset(
+        headCentre.dx - dirVec.dx * cellSize * 0.22,
+        headCentre.dy - dirVec.dy * cellSize * 0.22,
+      );
+      path.moveTo(behind.dx, behind.dy);
     } else {
-      final path = Path();
       final first = _centre(arrow.cells.first);
       path.moveTo(first.dx, first.dy);
+      // All intermediate + head cell centres
       for (int i = 1; i < arrow.cells.length; i++) {
-        final pt = _centre(arrow.cells[i]);
-        path.lineTo(pt.dx, pt.dy);
+        final c = _centre(arrow.cells[i]);
+        path.lineTo(c.dx, c.dy);
       }
-      canvas.drawPath(path, linePaint);
     }
+    // Extend to tip so shaft and arrowhead share the same endpoint
+    path.lineTo(tip.dx, tip.dy);
+    canvas.drawPath(path, linePaint);
 
-    // ── Arrowhead ─────────────────────────────────────────────────────────
+    // ── Arrowhead: open V, wings radiate back from tip ────────────────────
+    // Perpendicular direction (rotated 90°)
+    final perpX = -dirVec.dy;
+    final perpY =  dirVec.dx;
+
+    final wA = Offset(
+      tip.dx - dirVec.dx * wingBack + perpX * wingHalf,
+      tip.dy - dirVec.dy * wingBack + perpY * wingHalf,
+    );
+    final wB = Offset(
+      tip.dx - dirVec.dx * wingBack - perpX * wingHalf,
+      tip.dy - dirVec.dy * wingBack - perpY * wingHalf,
+    );
+
     final headPaint = Paint()
-      ..color      = color.withValues(alpha: opacity)
+      ..color       = color.withValues(alpha: opacity)
       ..strokeWidth = sw
-      ..strokeCap  = StrokeCap.round
-      ..style      = PaintingStyle.stroke;
+      ..strokeCap   = StrokeCap.round
+      ..strokeJoin  = StrokeJoin.round
+      ..style       = PaintingStyle.stroke;
 
-    final headCentre = _centre(arrow.cells.last);
-    // Push tip slightly outside the cell so it reads clearly
-    final tip = headCentre + _dirOffset(arrow.direction, cellSize * 0.30);
-
-    // Wing directions: perpendicular + back
-    final Offset wA, wB;
-    switch (arrow.direction) {
-      case ArrowDirection.up:
-        wA = tip + Offset(-hw,  hl);
-        wB = tip + Offset( hw,  hl);
-        break;
-      case ArrowDirection.down:
-        wA = tip + Offset(-hw, -hl);
-        wB = tip + Offset( hw, -hl);
-        break;
-      case ArrowDirection.left:
-        wA = tip + Offset( hl, -hw);
-        wB = tip + Offset( hl,  hw);
-        break;
-      case ArrowDirection.right:
-        wA = tip + Offset(-hl, -hw);
-        wB = tip + Offset(-hl,  hw);
-        break;
-    }
-
-    canvas.drawLine(tip, wA, headPaint);
-    canvas.drawLine(tip, wB, headPaint);
+    // wA → tip → wB as one continuous path
+    final vPath = Path()
+      ..moveTo(wA.dx, wA.dy)
+      ..lineTo(tip.dx, tip.dy)
+      ..lineTo(wB.dx, wB.dy);
+    canvas.drawPath(vPath, headPaint);
   }
 
   @override
@@ -136,7 +119,7 @@ class SnakeArrowPainter extends CustomPainter {
       old.cellSize        != cellSize;
 }
 
-// Keep single-cell ArrowPainter for the home-screen mini preview only
+// Single-cell ArrowPainter for the home-screen mini preview only
 class ArrowPainter extends CustomPainter {
   final ArrowDirection direction;
   final Color          color;
@@ -150,37 +133,54 @@ class ArrowPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final sw = size.width * 0.10;
     final paint = Paint()
-      ..color      = color.withValues(alpha: opacity)
-      ..strokeWidth = size.width * 0.10
-      ..strokeCap  = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style      = PaintingStyle.stroke;
+      ..color       = color.withValues(alpha: opacity)
+      ..strokeWidth = sw
+      ..strokeCap   = StrokeCap.round
+      ..strokeJoin  = StrokeJoin.round
+      ..style       = PaintingStyle.stroke;
 
-    final cx  = size.width  / 2;
-    final cy  = size.height / 2;
-    final len = size.width  * 0.28;
-    final hw  = size.width  * 0.14;
-    final hl  = size.width  * 0.18;
+    final cx       = size.width  / 2;
+    final cy       = size.height / 2;
+    final len      = size.width  * 0.28;
+    final wingHalf = sw * 1.8;
+    final wingBack = sw * 2.2;
 
-    late Offset tail, tip, wingA, wingB;
+    late Offset tail, tip;
+    late double dirX, dirY;
     switch (direction) {
       case ArrowDirection.up:
-        tail = Offset(cx, cy+len); tip = Offset(cx, cy-len);
-        wingA = Offset(cx-hw, cy-len+hl); wingB = Offset(cx+hw, cy-len+hl);
+        tail = Offset(cx, cy + len); tip = Offset(cx, cy - len);
+        dirX = 0; dirY = -1;
       case ArrowDirection.down:
-        tail = Offset(cx, cy-len); tip = Offset(cx, cy+len);
-        wingA = Offset(cx-hw, cy+len-hl); wingB = Offset(cx+hw, cy+len-hl);
+        tail = Offset(cx, cy - len); tip = Offset(cx, cy + len);
+        dirX = 0; dirY = 1;
       case ArrowDirection.left:
-        tail = Offset(cx+len, cy); tip = Offset(cx-len, cy);
-        wingA = Offset(cx-len+hl, cy-hw); wingB = Offset(cx-len+hl, cy+hw);
+        tail = Offset(cx + len, cy); tip = Offset(cx - len, cy);
+        dirX = -1; dirY = 0;
       case ArrowDirection.right:
-        tail = Offset(cx-len, cy); tip = Offset(cx+len, cy);
-        wingA = Offset(cx+len-hl, cy-hw); wingB = Offset(cx+len-hl, cy+hw);
+        tail = Offset(cx - len, cy); tip = Offset(cx + len, cy);
+        dirX = 1; dirY = 0;
     }
+
+    final perpX = -dirY;
+    final perpY =  dirX;
+    final wingA = Offset(
+      tip.dx - dirX * wingBack + perpX * wingHalf,
+      tip.dy - dirY * wingBack + perpY * wingHalf,
+    );
+    final wingB = Offset(
+      tip.dx - dirX * wingBack - perpX * wingHalf,
+      tip.dy - dirY * wingBack - perpY * wingHalf,
+    );
+
     canvas.drawLine(tail, tip, paint);
-    canvas.drawLine(tip, wingA, paint);
-    canvas.drawLine(tip, wingB, paint);
+    final vPath = Path()
+      ..moveTo(wingA.dx, wingA.dy)
+      ..lineTo(tip.dx, tip.dy)
+      ..lineTo(wingB.dx, wingB.dy);
+    canvas.drawPath(vPath, paint);
   }
 
   @override
