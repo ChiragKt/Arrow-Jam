@@ -150,7 +150,7 @@ class SettingsScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      '${d.gridSize}×${d.gridSize} grid  •  ${d.lives} lives',
+                                      '${d.gridSize}×${d.gridSize} grid  •  ${d.lives} lives  •  ${d.timeSeconds}s',
                                       style: GoogleFonts.spaceMono(
                                         color: theme.textSecondary,
                                         fontSize: 10,

@@ -2,96 +2,61 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../themes/app_themes.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Arrow model
-//
-// An Arrow is a multi-cell span:
-//   • (col, row)  — the HEAD cell (where the arrowhead is drawn)
-//   • direction   — which way the arrow points (and the direction it travels)
-//   • length      — how many cells it occupies (≥ 1)
-//
-// The cells it occupies are: head + (length-1) cells in the OPPOSITE direction.
-// Example: head=(3,0), direction=right, length=3  →  occupies cols 1,2,3 row 0.
-//
-// Clearing rule: the arrow is clearable when every cell AHEAD of the head
-// (in its direction) up to the grid boundary is either empty or already cleared.
-// ─────────────────────────────────────────────────────────────────────────────
+// ── ArrowCell ─────────────────────────────────────────────────────────────────
+
+class ArrowCell {
+  final int col;
+  final int row;
+  const ArrowCell(this.col, this.row);
+
+  @override
+  bool operator ==(Object other) =>
+      other is ArrowCell && other.col == col && other.row == row;
+  @override
+  int get hashCode => col * 1000 + row;
+  @override
+  String toString() => '($col,$row)';
+}
+
+// ── Arrow ─────────────────────────────────────────────────────────────────────
+// A multi-cell "snake" filling 1-N adjacent grid cells.
+// [cells] is ordered tail → head.
+// [direction] is the exit direction from the head cell.
+// col/row == head position == cells.last.
 
 class Arrow {
-  final int id;
-  final int col;        // head column
-  final int row;        // head row
-  final ArrowDirection direction;
-  final int length;     // number of cells this arrow spans (≥ 1)
+  final int             id;
+  final List<ArrowCell> cells;
+  final ArrowDirection  direction;
   bool cleared;
   bool animating;
 
   Arrow({
     required this.id,
-    required this.col,
-    required this.row,
+    required this.cells,
     required this.direction,
-<<<<<<< HEAD
-    required this.length,
-    this.cleared  = false,
-    this.animating = false,
-  });
-
-  /// All grid cells occupied by this arrow (head + body).
-  List<_Pos> get cells {
-    final result = <_Pos>[];
-    int c = col, r = row;
-    for (int i = 0; i < length; i++) {
-      result.add(_Pos(c, r));
-      // Body extends in the direction OPPOSITE to the arrow's direction
-      switch (direction) {
-        case ArrowDirection.up:    r++; break;
-        case ArrowDirection.down:  r--; break;
-        case ArrowDirection.left:  c++; break;
-        case ArrowDirection.right: c--; break;
-      }
-    }
-    return result;
-=======
     this.cleared   = false,
     this.animating = false,
   });
 
-  Arrow copyWith({
-    int? col, int? row, ArrowDirection? direction,
-    bool? cleared, bool? animating,
-  }) {
-    return Arrow(
-      id:        id,
-      col:       col       ?? this.col,
-      row:       row       ?? this.row,
-      direction: direction ?? this.direction,
-      cleared:   cleared   ?? this.cleared,
-      animating: animating ?? this.animating,
-    );
->>>>>>> 37eefb2 (bug fixes)
-  }
+  int get col => cells.last.col;
+  int get row => cells.last.row;
 
   Arrow copyWith({bool? cleared, bool? animating}) => Arrow(
-    id: id, col: col, row: row,
-    direction: direction, length: length,
+    id:        id,
+    cells:     cells,
+    direction: direction,
     cleared:   cleared   ?? this.cleared,
     animating: animating ?? this.animating,
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Difficulty
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Difficulty ────────────────────────────────────────────────────────────────
 
 class Difficulty {
   final String label;
   final String emoji;
   final int    gridSize;
-<<<<<<< HEAD
-=======
-  final int    arrowCount;
->>>>>>> 37eefb2 (bug fixes)
   final int    lives;
   final int    timeSeconds;
 
@@ -105,22 +70,34 @@ class Difficulty {
 }
 
 const List<Difficulty> kDifficulties = [
-  Difficulty(label: 'Easy',   emoji: '🟢', gridSize: 4, lives: 5, timeSeconds: 120),
-  Difficulty(label: 'Normal', emoji: '🟡', gridSize: 5, lives: 4, timeSeconds:  90),
-  Difficulty(label: 'Hard',   emoji: '🔴', gridSize: 6, lives: 3, timeSeconds:  70),
-  Difficulty(label: 'Expert', emoji: '💀', gridSize: 7, lives: 3, timeSeconds:  50),
+  Difficulty(label: 'Easy',   emoji: '🟢', gridSize: 4, lives: 5, timeSeconds: 90),
+  Difficulty(label: 'Normal', emoji: '🟡', gridSize: 5, lives: 4, timeSeconds: 70),
+  Difficulty(label: 'Hard',   emoji: '🔴', gridSize: 6, lives: 3, timeSeconds: 50),
+  Difficulty(label: 'Expert', emoji: '💀', gridSize: 7, lives: 3, timeSeconds: 35),
 ];
+
+Difficulty _customDifficulty(int size) => Difficulty(
+  label:       'Custom',
+  emoji:       '🔧',
+  gridSize:    size,
+  lives:       (size / 2).ceil().clamp(2, 6),
+  timeSeconds: (size * size * 2.5).toInt().clamp(20, 180),
+);
+
+// ── TapResult ─────────────────────────────────────────────────────────────────
 
 enum TapResult { cleared, collision, invalid }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GameState
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GameState ─────────────────────────────────────────────────────────────────
 
 class GameState extends ChangeNotifier {
+  // ── Mode selection ────────────────────────────────────────────────────────
   int  _difficultyIndex  = -1;
   bool _randomDifficulty = true;
+  bool _isCustom         = false;
+  int  _customGridSize   = 5;
 
+  // ── Runtime state ─────────────────────────────────────────────────────────
   int  _lives         = 4;
   int  _level         = 1;
   int  _score         = 0;
@@ -128,69 +105,42 @@ class GameState extends ChangeNotifier {
   bool _levelWon      = false;
   bool _isAnimating   = false;
   int  _timeRemaining = 60;
-
-<<<<<<< HEAD
-  List<Arrow> _arrows = [];
-  final Random _rng   = Random();
-  late Difficulty _activeDifficulty;
-
-  // ── getters ──────────────────────────────────────────────────────────────
-  int        get difficultyIndex  => _difficultyIndex;
-  bool       get randomDifficulty => _randomDifficulty;
-  Difficulty get difficulty       => _activeDifficulty;
-  Difficulty get selectedDifficulty => _difficultyIndex < 0
-      ? kDifficulties[1] : kDifficulties[_difficultyIndex];
-  int        get lives         => _lives;
-  int        get level         => _level;
-  int        get score         => _score;
-  bool       get gameOver      => _gameOver;
-  bool       get levelWon      => _levelWon;
-  bool       get isAnimating   => _isAnimating;
-  List<Arrow> get arrows       => _arrows;
-  int        get gridSize      => _activeDifficulty.gridSize;
-  int        get timeRemaining => _timeRemaining;
-
-  GameState() { _activeDifficulty = kDifficulties[1]; }
-
-  // ── public API ───────────────────────────────────────────────────────────
-=======
-  // Incremented every time startGame() / resetGame() is called so that
-  // ArrowGrid can detect a full reset even when _level returns to 1.
-  int _generation = 0;
+  int  _generation    = 0;
 
   List<Arrow>  _arrows = [];
   final Random _rng    = Random();
-
   late Difficulty _activeDifficulty;
 
   // ── Getters ──────────────────────────────────────────────────────────────
 
-  int        get difficultyIndex    => _difficultyIndex;
-  bool       get randomDifficulty   => _randomDifficulty;
-  Difficulty get difficulty         => _activeDifficulty;
-  Difficulty get selectedDifficulty => _difficultyIndex < 0
-      ? kDifficulties[1]
-      : kDifficulties[_difficultyIndex];
-  int        get lives              => _lives;
-  int        get level              => _level;
-  int        get score              => _score;
-  bool       get gameOver           => _gameOver;
-  bool       get levelWon           => _levelWon;
-  bool       get isAnimating        => _isAnimating;
-  List<Arrow>get arrows             => _arrows;
-  int        get gridSize           => _activeDifficulty.gridSize;
-  int        get timeRemaining      => _timeRemaining;
-  int        get generation         => _generation;
+  int         get difficultyIndex    => _difficultyIndex;
+  bool        get randomDifficulty   => _randomDifficulty;
+  bool        get isCustom           => _isCustom;
+  int         get customGridSize     => _customGridSize;
+  Difficulty  get difficulty         => _activeDifficulty;
+  Difficulty  get selectedDifficulty => _isCustom
+      ? _customDifficulty(_customGridSize)
+      : (_difficultyIndex < 0 ? kDifficulties[1] : kDifficulties[_difficultyIndex]);
+  int         get lives              => _lives;
+  int         get level              => _level;
+  int         get score              => _score;
+  bool        get gameOver           => _gameOver;
+  bool        get levelWon           => _levelWon;
+  bool        get isAnimating        => _isAnimating;
+  List<Arrow> get arrows             => _arrows;
+  int         get gridSize           => _activeDifficulty.gridSize;
+  int         get timeRemaining      => _timeRemaining;
+  int         get generation         => _generation;
 
   GameState() {
     _activeDifficulty = kDifficulties[1];
   }
->>>>>>> 37eefb2 (bug fixes)
 
   // ── Settings ─────────────────────────────────────────────────────────────
 
   void setRandomDifficulty(bool value) {
     _randomDifficulty = value;
+    _isCustom         = false;
     if (!value && _difficultyIndex < 0) _difficultyIndex = 1;
     notifyListeners();
   }
@@ -198,36 +148,36 @@ class GameState extends ChangeNotifier {
   void setDifficulty(int index) {
     _difficultyIndex  = index.clamp(0, kDifficulties.length - 1);
     _randomDifficulty = false;
+    _isCustom         = false;
+    notifyListeners();
+  }
+
+  void setCustom(int gridSize) {
+    _customGridSize   = gridSize.clamp(3, 10);
+    _isCustom         = true;
+    _randomDifficulty = false;
     notifyListeners();
   }
 
   // ── Game flow ─────────────────────────────────────────────────────────────
 
   void startGame() {
-<<<<<<< HEAD
+    _generation++;
     _level       = 1;
     _score       = 0;
     _gameOver    = false;
     _levelWon    = false;
     _isAnimating = false;
-=======
-    _generation++;          // <-- signals ArrowGrid to wipe all controllers
-    _level        = 1;
-    _score        = 0;
-    _gameOver     = false;
-    _levelWon     = false;
-    _isAnimating  = false;
->>>>>>> 37eefb2 (bug fixes)
     _resolveDifficulty();
     _lives = _activeDifficulty.lives;
     _generateLevel();
     notifyListeners();
   }
 
-<<<<<<< HEAD
-=======
   void _resolveDifficulty() {
-    if (_randomDifficulty) {
+    if (_isCustom) {
+      _activeDifficulty = _customDifficulty(_customGridSize);
+    } else if (_randomDifficulty) {
       _activeDifficulty = kDifficulties[_rng.nextInt(kDifficulties.length)];
     } else {
       _activeDifficulty =
@@ -235,23 +185,17 @@ class GameState extends ChangeNotifier {
     }
   }
 
->>>>>>> 37eefb2 (bug fixes)
   void tick() {
     if (_gameOver || _levelWon) return;
     if (_timeRemaining <= 0) {
       _lives--;
-<<<<<<< HEAD
-      if (_lives <= 0) { _lives = 0; _gameOver = true; }
-      else { _generateLevel(); }
-=======
       if (_lives <= 0) {
-        _lives   = 0;
+        _lives    = 0;
         _gameOver = true;
       } else {
-        _generation++;      // retry = new generation so controllers are cleared
+        _generation++;
         _generateLevel();
       }
->>>>>>> 37eefb2 (bug fixes)
       notifyListeners();
       return;
     }
@@ -273,312 +217,238 @@ class GameState extends ChangeNotifier {
     startGame();
   }
 
-  TapResult tapArrow(int arrowId, void Function() onAnimationDone) {
-    if (_isAnimating || _gameOver || _levelWon) return TapResult.invalid;
+  void _generateLevel() {
+    final int size = _activeDifficulty.gridSize;
+    _arrows = _buildSolvableSnakes(size);
+    _timeRemaining = (_activeDifficulty.timeSeconds - (_level - 1) * 3)
+        .clamp(15, _activeDifficulty.timeSeconds);
+  }
 
-    final idx = _arrows.indexWhere((a) => a.id == arrowId);
-    if (idx == -1) return TapResult.invalid;
+  // ── Snake generation ──────────────────────────────────────────────────────
+  //
+  // Algorithm:
+  //   1. Partition ALL n×n cells into connected polyomino "snakes" by
+  //      random-walk. Every cell belongs to exactly one snake.
+  //   2. Assign each snake a head-exit direction (prefer directions that
+  //      immediately exit the grid boundary for easier solvability).
+  //   3. Build dependency graph: snake A depends on snake B if any of B's
+  //      cells lie in A's exit ray.
+  //   4. Run Kahn's topological sort. If a linear ordering exists the puzzle
+  //      is provably solvable. Otherwise retry from step 1.
+  //   Average retries: ~1 for size≤5, ~4 for size=8, ~14 for size=10.
+
+  static const List<(int, int)> _dirs4 = [(0,-1),(0,1),(-1,0),(1,0)];
+
+  List<Arrow> _buildSolvableSnakes(int size) {
+    for (int attempt = 0; attempt < 2000; attempt++) {
+      final snakes = _partitionGrid(size);
+      if (snakes == null) continue;                      // shouldn't happen
+      final arrows = _assignDirections(snakes, size);
+      if (_isSolvable(arrows, size)) return arrows;
+    }
+    return _fallbackArrows(size);
+  }
+
+  // Step 1 — random-walk partition guaranteeing full coverage.
+  //
+  // We iterate over all cells in a shuffled order.  Whenever we reach an
+  // unvisited cell we start a new snake there and grow it greedily by up to
+  // (size-1) steps into neighbouring unvisited cells.  Because we always
+  // start from the next unvisited cell in our shuffled list we are
+  // guaranteed to cover every cell.
+  List<List<ArrowCell>>? _partitionGrid(int size) {
+    // grid[r][c] = snake index, or -1 if unvisited
+    final grid = List.generate(size, (_) => List.filled(size, -1));
+    final snakes = <List<ArrowCell>>[];
+
+    // Shuffled visit order ensures we don't miss any cell
+    final order = [
+      for (int r = 0; r < size; r++)
+        for (int c = 0; c < size; c++) ArrowCell(c, r)
+    ]..shuffle(_rng);
+
+    for (final start in order) {
+      if (grid[start.row][start.col] != -1) continue;
+
+      final sid   = snakes.length;
+      final snake = <ArrowCell>[start];
+      grid[start.row][start.col] = sid;
+
+      // Grow 0..(size-1) extra steps
+      final maxExtra = _rng.nextInt(size); // 0 = single-cell snake allowed
+      for (int step = 0; step < maxExtra; step++) {
+        final cur = snake.last;
+        final nb  = <ArrowCell>[];
+        for (final (dc, dr) in _dirs4) {
+          final nc = cur.col + dc;
+          final nr = cur.row + dr;
+          if (nc >= 0 && nc < size && nr >= 0 && nr < size &&
+              grid[nr][nc] == -1) {
+            nb.add(ArrowCell(nc, nr));
+          }
+        }
+        if (nb.isEmpty) break;
+        final next = nb[_rng.nextInt(nb.length)];
+        snake.add(next);
+        grid[next.row][next.col] = sid;
+      }
+
+      snakes.add(snake);
+    }
+
+    // Sanity: every cell must be assigned
+    for (int r = 0; r < size; r++) {
+      for (int c = 0; c < size; c++) {
+        if (grid[r][c] == -1) return null;
+      }
+    }
+    return snakes;
+  }
+
+  // Step 2 — assign a head-exit direction to each snake.
+  List<Arrow> _assignDirections(List<List<ArrowCell>> snakes, int size) {
+    final arrows = <Arrow>[];
+    int id = 0;
+
+    for (final cells in snakes) {
+      final head = cells.last;
+
+      // Collect directions that immediately leave the grid
+      final exiting = <ArrowDirection>[];
+      for (final dir in ArrowDirection.values) {
+        final nc = head.col + _dc(dir);
+        final nr = head.row + _dr(dir);
+        if (nc < 0 || nc >= size || nr < 0 || nr >= size) {
+          exiting.add(dir);
+        }
+      }
+
+      final dir = exiting.isNotEmpty
+          ? exiting[_rng.nextInt(exiting.length)]
+          : ArrowDirection.values[_rng.nextInt(4)];
+
+      arrows.add(Arrow(id: id++, cells: List.unmodifiable(cells), direction: dir));
+    }
+    return arrows;
+  }
+
+  // Step 3 — check solvability via Kahn's topological sort.
+  bool _isSolvable(List<Arrow> arrows, int size) {
+    // Map every grid cell to the index of the arrow that owns it
+    final cellOwner = <ArrowCell, int>{};
+    for (int i = 0; i < arrows.length; i++) {
+      for (final cell in arrows[i].cells) {
+        cellOwner[cell] = i;
+      }
+    }
+
+    // deps[i] = set of arrow indices that block arrow i's exit ray
+    final deps = List.generate(arrows.length, (_) => <int>{});
+    for (int i = 0; i < arrows.length; i++) {
+      final a = arrows[i];
+      int c = a.col + _dc(a.direction);
+      int r = a.row + _dr(a.direction);
+      while (c >= 0 && c < size && r >= 0 && r < size) {
+        final owner = cellOwner[ArrowCell(c, r)];
+        if (owner != null && owner != i) deps[i].add(owner);
+        c += _dc(a.direction);
+        r += _dr(a.direction);
+      }
+    }
+
+    // Kahn's algorithm
+    final n      = arrows.length;
+    final inDeg  = List.generate(n, (i) => deps[i].length);
+    final blocks = List.generate(n, (_) => <int>[]);
+    for (int i = 0; i < n; i++) {
+      for (final j in deps[i]) blocks[j].add(i);
+    }
+
+    final queue   = <int>[for (int i = 0; i < n; i++) if (inDeg[i] == 0) i];
+    int   cleared = 0;
+    while (queue.isNotEmpty) {
+      final node = queue.removeLast();
+      cleared++;
+      for (final blocked in blocks[node]) {
+        inDeg[blocked]--;
+        if (inDeg[blocked] == 0) queue.add(blocked);
+      }
+    }
+    return cleared == n;
+  }
+
+  // Fallback: every cell is its own single-cell arrow pointing up.
+  // Always solvable (top row clears first, then next row, etc.).
+  List<Arrow> _fallbackArrows(int size) {
+    final arrows = <Arrow>[];
+    int id = 0;
+    // Top row can always exit upward — start there
+    for (int r = 0; r < size; r++) {
+      final dir = r == 0 ? ArrowDirection.up : ArrowDirection.down;
+      for (int c = 0; c < size; c++) {
+        arrows.add(Arrow(
+          id:        id++,
+          cells:     [ArrowCell(c, r)],
+          direction: dir,
+        ));
+      }
+    }
+    // Re-run solvability fix: top row (up) has no blockers ✓
+    return arrows;
+  }
+
+  // Direction deltas
+  int _dc(ArrowDirection d) => switch (d) {
+    ArrowDirection.left  => -1,
+    ArrowDirection.right =>  1,
+    _                    =>  0,
+  };
+  int _dr(ArrowDirection d) => switch (d) {
+    ArrowDirection.up   => -1,
+    ArrowDirection.down =>  1,
+    _                   =>  0,
+  };
+
+  // ── Tap handling ──────────────────────────────────────────────────────────
+
+  TapResult tapArrow(int arrowId, void Function() onAnimationDone) {
+    if (_isAnimating)           return TapResult.invalid;
+    if (_gameOver || _levelWon) return TapResult.invalid;
+
+    final int idx = _arrows.indexWhere((a) => a.id == arrowId);
+    if (idx == -1)              return TapResult.invalid;
+
     final arrow = _arrows[idx];
     if (arrow.cleared || arrow.animating) return TapResult.invalid;
 
-    if (!_canClearNow(arrow)) {
+    final int size = _activeDifficulty.gridSize;
+
+    // All currently occupied cells except this arrow's own
+    final occupied = <ArrowCell>{
+      for (final a in _arrows)
+        if (!a.cleared && a.id != arrowId) ...a.cells,
+    };
+
+    // Walk exit ray from head
+    int  c       = arrow.col + _dc(arrow.direction);
+    int  r       = arrow.row + _dr(arrow.direction);
+    bool blocked = false;
+    while (c >= 0 && c < size && r >= 0 && r < size) {
+      if (occupied.contains(ArrowCell(c, r))) { blocked = true; break; }
+      c += _dc(arrow.direction);
+      r += _dr(arrow.direction);
+    }
+
+    if (blocked) {
       _lives--;
       if (_lives <= 0) { _lives = 0; _gameOver = true; }
       notifyListeners();
       return TapResult.collision;
     }
 
+    // Animate out
     _isAnimating = true;
     _arrows[idx] = arrow.copyWith(animating: true);
-    notifyListeners();
-
-    Future.delayed(const Duration(milliseconds: 450), () {
-      final i2 = _arrows.indexWhere((a) => a.id == arrowId);
-      if (i2 != -1) {
-        _arrows[i2] = _arrows[i2].copyWith(animating: false, cleared: true);
-      }
-      _isAnimating = false;
-      _score += 10 * arrow.length; // longer arrows = more points
-
-      if (_arrows.every((a) => a.cleared)) {
-        _levelWon = true;
-        _score += 50 + (_level * 20);
-      }
-      notifyListeners();
-      onAnimationDone();
-    });
-
-    return TapResult.cleared;
-  }
-
-  // ── private ───────────────────────────────────────────────────────────────
-
-  void _resolveDifficulty() {
-    _activeDifficulty = _randomDifficulty
-        ? kDifficulties[_rng.nextInt(kDifficulties.length)]
-        : kDifficulties[_difficultyIndex.clamp(0, kDifficulties.length - 1)];
-  }
-
-  void _generateLevel() {
-<<<<<<< HEAD
-    final size = _activeDifficulty.gridSize;
-    _arrows = _buildGrid(size);
-    _timeRemaining = (_activeDifficulty.timeSeconds - (_level - 1) * 3)
-        .clamp(20, _activeDifficulty.timeSeconds);
-  }
-
-  // ─── clearability (live game) ────────────────────────────────────────────
-  //
-  // An arrow is clearable when every cell strictly AHEAD of its head
-  // (in its direction, up to the grid boundary) is empty or already cleared.
-
-  bool _canClearNow(Arrow arrow) {
-    final size = _activeDifficulty.gridSize;
-=======
-    final int size  = _activeDifficulty.gridSize;
-    final int count = (_activeDifficulty.arrowCount + (_level - 1))
-        .clamp(_activeDifficulty.arrowCount, size * size - 1);
-    _arrows        = _buildSolvableArrows(size, count);
-    _timeRemaining = (_activeDifficulty.timeSeconds - (_level - 1) * 3)
-        .clamp(15, _activeDifficulty.timeSeconds);
-  }
-
-  // ── Arrow generation ──────────────────────────────────────────────────────
-
-  List<Arrow> _buildSolvableArrows(int size, int count) {
-    for (int attempt = 0; attempt < 300; attempt++) {
-      final arrows = _randomArrows(size, count);
-      if (_hasFreeArrow(arrows, size)) return arrows;
-    }
-    return _guaranteedArrows(size, count);
-  }
-
-  List<Arrow> _randomArrows(int size, int count) {
-    final occupied = <String>{};
-    final list     = <Arrow>[];
-    int id = 0, tries = 0;
-    while (list.length < count && tries < 1000) {
-      tries++;
-      final int col = _rng.nextInt(size);
-      final int row = _rng.nextInt(size);
-      final key = '$col,$row';
-      if (occupied.contains(key)) continue;
-      occupied.add(key);
-      list.add(Arrow(
-        id:        id++,
-        col:       col,
-        row:       row,
-        direction: ArrowDirection.values[_rng.nextInt(4)],
-      ));
-    }
-    return list;
-  }
-
-  bool _hasFreeArrow(List<Arrow> arrows, int size) {
-    for (final a in arrows) {
-      if (_canClear(a, arrows, size)) return true;
-    }
-    return false;
-  }
-
-  bool _canClear(Arrow arrow, List<Arrow> all, int size) {
->>>>>>> 37eefb2 (bug fixes)
-    int c = arrow.col, r = arrow.row;
-    while (true) {
-      switch (arrow.direction) {
-        case ArrowDirection.up:    r--; break;
-        case ArrowDirection.down:  r++; break;
-        case ArrowDirection.left:  c--; break;
-        case ArrowDirection.right: c++; break;
-      }
-      if (c < 0 || c >= size || r < 0 || r >= size) return true;
-      // Is there any uncleared arrow whose body occupies (c, r)?
-      final blocked = _arrows.any(
-        (a) => !a.cleared && a.id != arrow.id && a.cells.any((p) => p.c == c && p.r == r),
-      );
-      if (blocked) return false;
-    }
-  }
-
-  // ─── Grid generation ─────────────────────────────────────────────────────
-  //
-  // Concept  ── matches the reference image:
-  //   • Every cell of the grid is occupied by exactly one arrow.
-  //   • Arrows span multiple cells (length ≥ 1) in one direction.
-  //   • Arrow lengths are randomised; they partition the grid completely
-  //     (total cells covered = size × size).
-  //   • Arrows form interlocked chains: the head of each arrow points
-  //     toward the NEXT arrow in its chain, so you must clear them in order.
-  //   • The puzzle is guaranteed solvable by simulation before use.
-  //
-  // Algorithm:
-  //   1. Randomly partition all cells into straight runs (segments).
-  //      A segment is a maximal run of consecutive cells in one direction.
-  //   2. Within each segment, assign the arrow direction = segment direction,
-  //      head = the cell at the "tip" of the segment (the end that faces
-  //      toward the direction it points).
-  //   3. Verify solvability; retry up to 100× if needed.
-
-  List<Arrow> _buildGrid(int size) {
-    for (int attempt = 0; attempt < 120; attempt++) {
-      final result = _tryBuildGrid(size);
-      if (result != null) return result;
-    }
-<<<<<<< HEAD
-    return _fallbackGrid(size);
-  }
-
-  List<Arrow>? _tryBuildGrid(int size) {
-    // ── Step 1: partition all cells into straight segments ──────────────────
-    //
-    // We do a random walk that partitions the grid into axis-aligned runs:
-    //   • Maintain a grid of which cells are assigned.
-    //   • Pick a random unassigned cell as segment start.
-    //   • Pick a random direction; extend as far as possible (up to maxLen)
-    //     through unassigned cells.
-    //   • Record the segment.
-    //   • Repeat until all cells assigned.
-
-    final assigned = List.generate(size, (_) => List.filled(size, false));
-    final segments = <_Segment>[];
-
-    // Shuffle the cell order so segments start from random places
-    final order = [for (int r = 0; r < size; r++) for (int c = 0; c < size; c++) _Pos(c, r)];
-    order.shuffle(_rng);
-
-    // Max segment length: up to half the grid size, minimum 1
-    final maxLen = (size / 2).ceil().clamp(2, size);
-
-    for (final start in order) {
-      if (assigned[start.r][start.c]) continue;
-
-      // Try all four directions in random order
-      final dirs = ArrowDirection.values.toList()..shuffle(_rng);
-      bool placed = false;
-
-      for (final d in dirs) {
-        // Measure how far we can extend from start in direction d
-        int len = 0;
-        int c = start.c, r = start.r;
-        while (len < maxLen) {
-          if (c < 0 || c >= size || r < 0 || r >= size) break;
-          if (assigned[r][c]) break;
-          len++;
-          switch (d) {
-            case ArrowDirection.up:    r--; break;
-            case ArrowDirection.down:  r++; break;
-            case ArrowDirection.left:  c--; break;
-            case ArrowDirection.right: c++; break;
-          }
-        }
-        if (len == 0) continue;
-
-        // Randomly shorten the segment (so lengths are varied, not always maxLen)
-        // At minimum keep 1 cell.
-        final segLen = len == 1 ? 1 : (1 + _rng.nextInt(len));
-
-        // Mark those cells as assigned and record the segment.
-        // The HEAD is the cell at the far end (the tip in direction d).
-        int hc = start.c, hr = start.r;
-        for (int i = 0; i < segLen; i++) {
-          assigned[hr][hc] = true;
-          if (i < segLen - 1) {
-            switch (d) {
-              case ArrowDirection.up:    hr--; break;
-              case ArrowDirection.down:  hr++; break;
-              case ArrowDirection.left:  hc--; break;
-              case ArrowDirection.right: hc++; break;
-            }
-          }
-        }
-        // hc, hr is now the tip cell (the head of the arrow)
-        segments.add(_Segment(headCol: hc, headRow: hr, direction: d, length: segLen));
-        placed = true;
-        break;
-      }
-
-      if (!placed) return null; // couldn't fit — retry
-    }
-
-    // ── Step 2: convert segments to Arrows ──────────────────────────────────
-    final arrows = <Arrow>[];
-    int id = 0;
-    for (final seg in segments) {
-      arrows.add(Arrow(
-        id:        id++,
-        col:       seg.headCol,
-        row:       seg.headRow,
-        direction: seg.direction,
-        length:    seg.length,
-      ));
-    }
-
-    // ── Step 3: verify all cells are covered exactly once ───────────────────
-    final coverage = List.generate(size, (_) => List.filled(size, 0));
-    for (final a in arrows) {
-      for (final p in a.cells) {
-        if (p.c < 0 || p.c >= size || p.r < 0 || p.r >= size) return null;
-        coverage[p.r][p.c]++;
-      }
-    }
-    for (int r = 0; r < size; r++) {
-      for (int c = 0; c < size; c++) {
-        if (coverage[r][c] != 1) return null;
-      }
-    }
-
-    // ── Step 4: verify solvability ───────────────────────────────────────────
-    if (!_isSolvable(arrows, size)) return null;
-
-    return arrows;
-=======
-    final occupied = {for (final a in list) '${a.col},${a.row}'};
-    int tries = 0;
-    while (list.length < count && tries < 500) {
-      tries++;
-      final int c = _rng.nextInt(size);
-      final int r = _rng.nextInt(size);
-      final key = '$c,$r';
-      if (occupied.contains(key)) continue;
-      occupied.add(key);
-      list.add(Arrow(
-        id:        id++,
-        col:       c,
-        row:       r,
-        direction: ArrowDirection.values[_rng.nextInt(4)],
-      ));
-    }
-    return list;
-  }
-
-  // ── Tap handling ──────────────────────────────────────────────────────────
-
-  TapResult tapArrow(int arrowId, void Function() onAnimationDone) {
-    if (_isAnimating)              return TapResult.invalid;
-    if (_gameOver || _levelWon)    return TapResult.invalid;
-
-    final int idx = _arrows.indexWhere((a) => a.id == arrowId);
-    if (idx == -1)                 return TapResult.invalid;
-
-    final arrow = _arrows[idx];
-    if (arrow.cleared || arrow.animating) return TapResult.invalid;
-
-    final int    size      = _activeDifficulty.gridSize;
-    final Arrow? collision = _findCollision(arrow, size);
-
-    if (collision != null) {
-      _lives--;
-      if (_lives <= 0) {
-        _lives    = 0;
-        _gameOver = true;
-      }
-      notifyListeners();
-      return TapResult.collision;
-    }
-
-    // Clear path — animate out
-    _isAnimating   = true;
-    _arrows[idx]   = arrow.copyWith(animating: true);
     notifyListeners();
 
     Future.delayed(const Duration(milliseconds: 450), () {
@@ -587,7 +457,7 @@ class GameState extends ChangeNotifier {
         _arrows[i2] = _arrows[i2].copyWith(animating: false, cleared: true);
       }
       _isAnimating  = false;
-      _score       += 10;
+      _score       += 10 * arrow.cells.length;
 
       if (_arrows.every((a) => a.cleared)) {
         _levelWon  = true;
@@ -598,106 +468,5 @@ class GameState extends ChangeNotifier {
     });
 
     return TapResult.cleared;
->>>>>>> 37eefb2 (bug fixes)
   }
-
-  // ─── Solvability simulation ───────────────────────────────────────────────
-  //
-  // Repeatedly find arrows whose path-ahead is clear and "clear" them,
-  // until no more progress or all cleared.  Must reach 100%.
-
-  bool _isSolvable(List<Arrow> arrows, int size) {
-    final cleared = List.filled(arrows.length, false);
-
-    bool progress = true;
-    while (progress) {
-      progress = false;
-      for (int i = 0; i < arrows.length; i++) {
-        if (cleared[i]) continue;
-        if (_canClearSim(arrows[i], arrows, cleared, size)) {
-          cleared[i] = true;
-          progress   = true;
-        }
-      }
-    }
-    return cleared.every((c) => c);
-  }
-
-  bool _canClearSim(Arrow arrow, List<Arrow> all, List<bool> cleared, int size) {
-    int c = arrow.col, r = arrow.row;
-    while (true) {
-      switch (arrow.direction) {
-        case ArrowDirection.up:    r--; break;
-        case ArrowDirection.down:  r++; break;
-        case ArrowDirection.left:  c--; break;
-        case ArrowDirection.right: c++; break;
-      }
-<<<<<<< HEAD
-      if (c < 0 || c >= size || r < 0 || r >= size) return true;
-      // Any uncleared arrow body at (c, r)?
-      for (int i = 0; i < all.length; i++) {
-        if (cleared[i] || all[i].id == arrow.id) continue;
-        if (all[i].cells.any((p) => p.c == c && p.r == r)) return false;
-      }
-    }
-  }
-
-  // ─── Fallback grid ────────────────────────────────────────────────────────
-  //
-  // Trivially solvable: each column is one vertical arrow pointing up.
-  // Guarantees: all cells covered, all immediately clearable (pointing to edge).
-
-  List<Arrow> _fallbackGrid(int size) {
-    final arrows = <Arrow>[];
-    for (int c = 0; c < size; c++) {
-      arrows.add(Arrow(
-        id:        c,
-        col:       c,
-        row:       0,               // head at top
-        direction: ArrowDirection.up,
-        length:    size,            // spans entire column
-      ));
-    }
-    return arrows;
-=======
-      if (c < 0 || c >= size || r < 0 || r >= size) return null;
-      final Arrow? hit =
-          _arrows.where((a) => !a.cleared && a.col == c && a.row == r).firstOrNull;
-      if (hit != null) return hit;
-    }
-  }
-
-  void resetGame() {
-    _gameOver = false;
-    _levelWon = false;
-    startGame(); // startGame() increments _generation
->>>>>>> 37eefb2 (bug fixes)
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _Pos {
-  final int c, r;
-  const _Pos(this.c, this.r);
-
-  @override
-  bool operator ==(Object other) => other is _Pos && other.c == c && other.r == r;
-
-  @override
-  int get hashCode => c * 1000 + r;
-}
-
-class _Segment {
-  final int headCol, headRow;
-  final ArrowDirection direction;
-  final int length;
-  const _Segment({
-    required this.headCol,
-    required this.headRow,
-    required this.direction,
-    required this.length,
-  });
 }

@@ -24,41 +24,31 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
   final Map<int, Animation<Offset>>   _flySlide  = {};
   final Map<int, Animation<double>>   _flyFade   = {};
   final Map<int, AnimationController> _shakeCtrl = {};
-<<<<<<< HEAD
   final Set<int>                      _flyDone   = {};
 
-  @override
-  void dispose() {
-    for (final c in _flyCtrl.values)   c.dispose();
-    for (final c in _shakeCtrl.values) c.dispose();
-=======
-  // ids whose fly animation has fully completed — these render as opacity 0
-  // and are hidden on the next build. Keeping them in the set avoids the
-  // one-frame ghost that appears when isAnimating flips to false but the
-  // widget hasn't been hidden yet.
-  final Set<int> _flyDone = {};
-
-  // ── Level-change / reset detection ──────────────────────────────────────
-  // We track both level and a generation counter on GameState so that
-  // resetGame() (which brings level back to 1) is also detected correctly.
   int? _lastLevel;
   int? _lastGeneration;
 
   @override
+  void initState() {
+    super.initState();
+    _lastLevel      = widget.gs.level;
+    _lastGeneration = widget.gs.generation;
+  }
+
+  @override
   void didUpdateWidget(ArrowGrid old) {
     super.didUpdateWidget(old);
-    final gs  = widget.gs;
-    final lvl = gs.level;
-    final gen = gs.generation; // incremented by startGame() / resetGame()
-
+    final lvl = widget.gs.level;
+    final gen = widget.gs.generation;
     if (lvl != _lastLevel || gen != _lastGeneration) {
-      _clearAllControllers();
+      _clearAll();
       _lastLevel      = lvl;
       _lastGeneration = gen;
     }
   }
 
-  void _clearAllControllers() {
+  void _clearAll() {
     for (final c in _flyCtrl.values)   c.dispose();
     for (final c in _shakeCtrl.values) c.dispose();
     _flyCtrl.clear();
@@ -69,20 +59,12 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
   }
 
   @override
-  void initState() {
-    super.initState();
-    _lastLevel      = widget.gs.level;
-    _lastGeneration = widget.gs.generation;
-  }
-
-  @override
   void dispose() {
-    _clearAllControllers();
->>>>>>> 37eefb2 (bug fixes)
+    _clearAll();
     super.dispose();
   }
 
-  // ── Animation launchers ──────────────────────────────────────────────────
+  // ── Fly animation ────────────────────────────────────────────────────────
 
   void _startFly(int id, ArrowDirection dir) {
     _flyCtrl[id]?.dispose();
@@ -90,60 +72,30 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
 
     final ctrl = AnimationController(
       vsync:    this,
-<<<<<<< HEAD
-      duration: const Duration(milliseconds: 380),
-    );
-
-    // Fly distance: 2 full cells in the arrow's direction
-    const dist = 2.0;
-=======
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 420),
     );
 
     const dist = 2.5;
->>>>>>> 37eefb2 (bug fixes)
-    final Offset end;
-    switch (dir) {
-      case ArrowDirection.up:    end = const Offset(0, -dist); break;
-      case ArrowDirection.down:  end = const Offset(0,  dist); break;
-      case ArrowDirection.left:  end = const Offset(-dist, 0); break;
-      case ArrowDirection.right: end = const Offset( dist, 0); break;
-    }
+    final Offset end = switch (dir) {
+      ArrowDirection.up    => const Offset(0, -dist),
+      ArrowDirection.down  => const Offset(0,  dist),
+      ArrowDirection.left  => const Offset(-dist, 0),
+      ArrowDirection.right => const Offset( dist, 0),
+    };
 
     _flySlide[id] = Tween<Offset>(begin: Offset.zero, end: end)
         .animate(CurvedAnimation(parent: ctrl, curve: Curves.easeIn));
-
-<<<<<<< HEAD
-    _flyFade[id] = Tween<double>(begin: 1.0, end: 0.0)
-        .animate(CurvedAnimation(
-          parent: ctrl,
-          curve: const Interval(0.25, 0.88, curve: Curves.easeOut),
-        ));
-=======
-    _flyFade[id] = Tween<double>(begin: 1.0, end: 0.0).animate(
+    _flyFade[id]  = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(
         parent: ctrl,
-        curve: const Interval(0.4, 1.0, curve: Curves.easeOut),
+        curve: const Interval(0.35, 1.0, curve: Curves.easeOut),
       ),
     );
->>>>>>> 37eefb2 (bug fixes)
-
-    _flyCtrl[id] = ctrl;
+    _flyCtrl[id]  = ctrl;
 
     ctrl.addListener(() { if (mounted) setState(() {}); });
-<<<<<<< HEAD
     ctrl.addStatusListener((s) {
       if (s == AnimationStatus.completed) {
-        _flyDone.add(id);
-        if (mounted) setState(() {});
-      }
-    });
-=======
-
-    ctrl.addStatusListener((s) {
-      if (s == AnimationStatus.completed) {
-        // Mark done BEFORE setState so the rebuild sees opacity=0 immediately,
-        // preventing the one-frame ghost where isAnimating just flipped false.
         _flyDone.add(id);
         _flyCtrl[id]?.dispose();
         _flyCtrl.remove(id);
@@ -152,30 +104,22 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
         if (mounted) setState(() {});
       }
     });
-
->>>>>>> 37eefb2 (bug fixes)
     ctrl.forward();
   }
+
+  // ── Shake animation ──────────────────────────────────────────────────────
 
   void _startShake(int id) {
     _shakeCtrl[id]?.dispose();
     final ctrl = AnimationController(
       vsync:    this,
-<<<<<<< HEAD
-      duration: const Duration(milliseconds: 55),
-=======
       duration: const Duration(milliseconds: 60),
->>>>>>> 37eefb2 (bug fixes)
     );
     _shakeCtrl[id] = ctrl;
     ctrl.addListener(() { if (mounted) setState(() {}); });
     ctrl.repeat(reverse: true);
-<<<<<<< HEAD
-    Future.delayed(const Duration(milliseconds: 330), () {
-=======
     Future.delayed(const Duration(milliseconds: 360), () {
       if (!mounted) return;
->>>>>>> 37eefb2 (bug fixes)
       ctrl.stop();
       ctrl.reset();
       _shakeCtrl.remove(id);
@@ -197,181 +141,108 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
         final totalSize = constraints.maxWidth;
         final cellSize  = totalSize / n;
 
+        // Visible arrows (not yet fully done)
+        final visible = gs.arrows.where((a) =>
+          !_flyDone.contains(a.id) &&
+          !(a.cleared && _flyCtrl[a.id] == null)
+        ).toList();
+
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            // Grid lines
+            // ── Grid lines ─────────────────────────────────────────────────
             CustomPaint(
               size: Size(totalSize, totalSize),
               painter: _GridPainter(n: n, lineColor: theme.gridLine),
             ),
-            // Arrows
-            ...gs.arrows.map((arrow) {
-<<<<<<< HEAD
-              // Fully done — hide immediately
-              if (arrow.cleared && _flyDone.contains(arrow.id)) {
-=======
-              // Fully done animating — hide it
-              if (_flyDone.contains(arrow.id)) {
-                return const SizedBox.shrink();
+
+            // ── Snake bodies (drawn on full-grid canvas, behind hit areas) ─
+            // One CustomPaint per arrow, each covering the entire grid so
+            // the snake polyline can span multiple cells without clipping.
+            ...visible.map((arrow) {
+              final isFlying  = _flyCtrl[arrow.id]?.isAnimating == true;
+              final flySlide  = _flySlide[arrow.id];
+              final flyFade   = _flyFade[arrow.id];
+              final shakeCtrl = _shakeCtrl[arrow.id];
+
+              Offset slideOffset = Offset.zero;
+              if (isFlying && flySlide != null) {
+                final frac = flySlide.value;
+                slideOffset = Offset(frac.dx * cellSize, frac.dy * cellSize);
               }
-              // Cleared but no fly running — hide it
-              if (arrow.cleared && _flyCtrl[arrow.id] == null) {
->>>>>>> 37eefb2 (bug fixes)
-                return const SizedBox.shrink();
+
+              final double shakeOffset = (shakeCtrl != null && shakeCtrl.isAnimating)
+                  ? (shakeCtrl.value - 0.5) * 8.0
+                  : 0.0;
+
+              final double opacity;
+              if (isFlying && flyFade != null) {
+                opacity = flyFade.value.clamp(0.0, 1.0);
+              } else if (_flyDone.contains(arrow.id)) {
+                opacity = 0.0;
+              } else {
+                opacity = 1.0;
               }
-              if (arrow.cleared && _flyCtrl[arrow.id] == null) {
-                return const SizedBox.shrink();
-              }
-              return _buildArrowTile(arrow, cellSize, n, theme);
+
+              return Positioned(
+                key:    ValueKey('body_${arrow.id}'),
+                left:   slideOffset.dx + shakeOffset,
+                top:    slideOffset.dy,
+                width:  totalSize,
+                height: totalSize,
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: opacity,
+                    child: CustomPaint(
+                      size: Size(totalSize, totalSize),
+                      painter: SnakeArrowPainter(
+                        arrow:    arrow,
+                        color:    theme.arrowColor(arrow.direction),
+                        opacity:  1.0,
+                        cellSize: cellSize,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+
+            // ── Per-cell hit targets ────────────────────────────────────────
+            // One GestureDetector per cell of each visible snake.
+            // All cells of the same arrow route taps to the same handler.
+            ...visible.expand((arrow) {
+              final isFlying = _flyCtrl[arrow.id]?.isAnimating == true;
+              return arrow.cells.map((cell) => Positioned(
+                key:    ValueKey('hit_${arrow.id}_${cell.col}_${cell.row}'),
+                left:   cell.col * cellSize,
+                top:    cell.row * cellSize,
+                width:  cellSize,
+                height: cellSize,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: (arrow.cleared || arrow.animating || isFlying)
+                      ? null
+                      : () {
+                          final result = widget.gs.tapArrow(arrow.id, () {
+                            if (mounted) setState(() {});
+                          });
+                          if (result == TapResult.cleared) {
+                            _startFly(arrow.id, arrow.direction);
+                          } else if (result == TapResult.collision) {
+                            _startShake(arrow.id);
+                          }
+                        },
+                ),
+              ));
             }),
           ],
         );
       }),
     );
   }
-
-  Widget _buildArrowTile(Arrow arrow, double cellSize, int n, AppTheme theme) {
-    // ── Geometry ────────────────────────────────────────────────────────────
-    //
-    // The arrow's body extends from the HEAD backwards (opposite to direction).
-    // We need the top-left corner of the bounding rectangle, plus its pixel size.
-    //
-    // For a horizontal arrow (left/right): width = length×cell, height = cell
-    // For a vertical   arrow (up/down):    width = cell,         height = length×cell
-
-<<<<<<< HEAD
-    final isHorizontal = arrow.direction == ArrowDirection.left ||
-                         arrow.direction == ArrowDirection.right;
-
-    // Find the top-left cell of the bounding box
-    final headC = arrow.col;
-    final headR = arrow.row;
-
-    int minC = headC, minR = headR;
-    // Body extends backward: step opposite to direction (length-1) times
-    int bc = headC, br = headR;
-    for (int i = 1; i < arrow.length; i++) {
-      switch (arrow.direction) {
-        case ArrowDirection.up:    br++; break;
-        case ArrowDirection.down:  br--; break;
-        case ArrowDirection.left:  bc++; break;
-        case ArrowDirection.right: bc--; break;
-      }
-    }
-    minC = headC < bc ? headC : bc;
-    minR = headR < br ? headR : br;
-
-    final double left = minC * cellSize;
-    final double top  = minR * cellSize;
-    final double w    = isHorizontal ? arrow.length * cellSize : cellSize;
-    final double h    = isHorizontal ? cellSize : arrow.length * cellSize;
-
-    // ── Animations ──────────────────────────────────────────────────────────
-=======
-    // ── Shake ──────────────────────────────────────────────────────────────
->>>>>>> 37eefb2 (bug fixes)
-    final shakeCtrl   = _shakeCtrl[arrow.id];
-    final shakeOffset = (shakeCtrl != null && shakeCtrl.isAnimating)
-        ? (shakeCtrl.value - 0.5) * 6.0
-        : 0.0;
-
-<<<<<<< HEAD
-=======
-    // ── Fly ────────────────────────────────────────────────────────────────
->>>>>>> 37eefb2 (bug fixes)
-    final flyCtrl  = _flyCtrl[arrow.id];
-    final flySlide = _flySlide[arrow.id];
-    final flyFade  = _flyFade[arrow.id];
-    final isFlying = flyCtrl != null && flyCtrl.isAnimating;
-
-    Offset slideOffset = Offset.zero;
-    if (isFlying && flySlide != null) {
-      final frac = flySlide.value;
-      slideOffset = Offset(frac.dx * cellSize, frac.dy * cellSize);
-    }
-
-<<<<<<< HEAD
-    double opacity = 1.0;
-=======
-    // Opacity:
-    //  • During fly  → use fade animation value
-    //  • In _flyDone → 0.0  (shouldn't reach here, but belt-and-braces)
-    //  • Otherwise   → 1.0
-    final double opacity;
->>>>>>> 37eefb2 (bug fixes)
-    if (isFlying && flyFade != null) {
-      opacity = flyFade.value.clamp(0.0, 1.0);
-    } else if (_flyDone.contains(arrow.id)) {
-      opacity = 0.0;
-<<<<<<< HEAD
-    }
-
-    return Positioned(
-      key:  ValueKey(arrow.id),
-      left: left + slideOffset.dx + shakeOffset,
-      top:  top  + slideOffset.dy,
-=======
-    } else {
-      opacity = 1.0;
-    }
-
-    return Positioned(
-      key:    ValueKey(arrow.id),
-      left:   x + slideOffset.dx + shakeOffset,
-      top:    y + slideOffset.dy,
-      width:  cellSize,
-      height: cellSize,
->>>>>>> 37eefb2 (bug fixes)
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: (arrow.cleared || arrow.animating || isFlying)
-            ? null
-            : () {
-                final result = widget.gs.tapArrow(arrow.id, () {
-                  if (mounted) setState(() {});
-                });
-                if (result == TapResult.cleared) {
-                  _startFly(arrow.id, arrow.direction);
-                } else if (result == TapResult.collision) {
-                  _startShake(arrow.id);
-                }
-              },
-        child: Opacity(
-          opacity: opacity,
-<<<<<<< HEAD
-          child: SizedBox(
-            width:  w,
-            height: h,
-            child: CustomPaint(
-              painter: ArrowPainter(
-                direction: arrow.direction,
-                color:     widget.theme.arrowColor(arrow.direction),
-                opacity:   1.0,
-                length:    arrow.length,
-                cellSize:  cellSize,
-              ),
-=======
-          child: CustomPaint(
-            size:    Size(cellSize, cellSize),
-            painter: ArrowPainter(
-              direction: arrow.direction,
-              color:     widget.theme.arrowColor(arrow.direction),
-              opacity:   1.0,
->>>>>>> 37eefb2 (bug fixes)
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
-<<<<<<< HEAD
-// ── Grid painter ─────────────────────────────────────────────────────────────
-=======
 // ── Grid painter ──────────────────────────────────────────────────────────────
->>>>>>> 37eefb2 (bug fixes)
 
 class _GridPainter extends CustomPainter {
   final int   n;
@@ -386,13 +257,8 @@ class _GridPainter extends CustomPainter {
     final cell = size.width / n;
     for (int i = 0; i <= n; i++) {
       final pos = i * cell;
-<<<<<<< HEAD
-      canvas.drawLine(Offset(pos, 0),           Offset(pos, size.height), paint);
-      canvas.drawLine(Offset(0, pos),           Offset(size.width, pos),  paint);
-=======
-      canvas.drawLine(Offset(pos, 0),         Offset(pos, size.height), paint);
-      canvas.drawLine(Offset(0,   pos),       Offset(size.width, pos),  paint);
->>>>>>> 37eefb2 (bug fixes)
+      canvas.drawLine(Offset(pos, 0),     Offset(pos, size.height), paint);
+      canvas.drawLine(Offset(0,   pos),   Offset(size.width, pos),  paint);
     }
   }
 
