@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../themes/app_themes.dart';
+import '../services/storage_service.dart';
 
 // ── ArrowCell ─────────────────────────────────────────────────────────────────
 
@@ -19,12 +20,10 @@ class ArrowCell {
 }
 
 // ── Arrow ─────────────────────────────────────────────────────────────────────
-// Every arrow occupies exactly ONE cell.
-// [direction] is the exit direction the arrow must fire in.
 
 class Arrow {
   final int            id;
-  final List<ArrowCell> cells; // always length 1
+  final List<ArrowCell> cells;
   final ArrowDirection  direction;
   bool cleared;
   bool animating;
@@ -109,7 +108,9 @@ class GameState extends ChangeNotifier {
   final Random _rng    = Random();
   late Difficulty _activeDifficulty;
 
-  // ── Getters ──────────────────────────────────────────────────────────────
+  final StorageService _storage = StorageService();
+
+  // ── Getters ───────────────────────────────────────────────────────────────
 
   int         get difficultyIndex    => _difficultyIndex;
   bool        get randomDifficulty   => _randomDifficulty;
@@ -134,7 +135,7 @@ class GameState extends ChangeNotifier {
     _activeDifficulty = kDifficulties[1];
   }
 
-  // ── Settings ─────────────────────────────────────────────────────────────
+  // ── Settings ──────────────────────────────────────────────────────────────
 
   void setRandomDifficulty(bool value) {
     _randomDifficulty = value;
@@ -170,6 +171,8 @@ class GameState extends ChangeNotifier {
     _lives = _activeDifficulty.lives;
     _generateLevel();
     notifyListeners();
+    // Persist: count a new game session
+    _storage.incrementGamesPlayed();
   }
 
   void _resolveDifficulty() {
@@ -190,6 +193,8 @@ class GameState extends ChangeNotifier {
       if (_lives <= 0) {
         _lives    = 0;
         _gameOver = true;
+        // Persist: game-over via time-out
+        _storage.incrementGameOvers();
       } else {
         _generation++;
         _generateLevel();
@@ -215,6 +220,16 @@ class GameState extends ChangeNotifier {
     startGame();
   }
 
+  /// Rewarded-ad continuation: restore one life and resume from current level.
+  /// Call this inside `AdService().showRewarded(onRewarded: () { gs.continueAfterGameOver(); })`.
+  void continueAfterGameOver() {
+    _gameOver    = false;
+    _lives       = 1;        // one last life to keep going
+    _isAnimating = false;
+    _generateLevel();        // fresh puzzle, same level
+    notifyListeners();
+  }
+
   void _generateLevel() {
     final int size = _activeDifficulty.gridSize;
     _arrows = _buildSolvablePuzzle(size);
@@ -222,35 +237,21 @@ class GameState extends ChangeNotifier {
         .clamp(15, _activeDifficulty.timeSeconds);
   }
 
-  // ── Puzzle generation — one cell per arrow, backtracking ─────────────────
-  //
-  // Every cell in the n×n grid gets exactly one arrow.
-  // We assign directions via backtracking over a randomised cell order so
-  // the resulting dependency graph is a DAG (i.e. the puzzle is solvable).
-  //
-  // A direction assignment is valid iff:
-  //   • It does not create a cycle in the dependency graph built so far.
-  //
-  // We detect cycles incrementally with a lightweight DFS after each
-  // assignment rather than running the full topological sort every time.
+  // ── Puzzle generation ─────────────────────────────────────────────────────
 
   List<Arrow> _buildSolvablePuzzle(int size) {
     final n = size * size;
 
-    // Cells in a random order — this is our backtracking variable order.
     final cells = [
       for (int r = 0; r < size; r++)
         for (int c = 0; c < size; c++) ArrowCell(c, r),
     ]..shuffle(_rng);
 
-    // assignment[i] = direction chosen for cells[i], or null if unassigned.
     final assignment = List<ArrowDirection?>.filled(n, null);
 
-    // cellIndex maps ArrowCell → index in [cells].
     final cellIndex = <ArrowCell, int>{};
     for (int i = 0; i < n; i++) cellIndex[cells[i]] = i;
 
-    // Direction delta helpers (inlined for speed).
     int dc(ArrowDirection d) => switch (d) {
       ArrowDirection.left  => -1,
       ArrowDirection.right =>  1,
@@ -262,8 +263,6 @@ class GameState extends ChangeNotifier {
       _                   =>  0,
     };
 
-    // Build adjacency: adj[i] = list of cell indices that cell i BLOCKS
-    // (i.e. lie on i's exit ray) given direction d.
     List<int> rayTargets(int idx, ArrowDirection d) {
       final cell = cells[idx];
       final targets = <int>[];
@@ -278,71 +277,54 @@ class GameState extends ChangeNotifier {
       return targets;
     }
 
-    // adj[i] = set of nodes that i points TO (i must fire after them).
-    // Edge i→j means "i depends on j" (j must be cleared before i can fire).
-    // Cycle check: after assigning direction to node [idx] we add edges
-    // idx → each target in its ray, then check the graph is still a DAG.
     final adj = List.generate(n, (_) => <int>{});
 
-    // DFS-based cycle detection on partial graph.
-    // Returns true if there is a cycle reachable from [start].
     bool hasCycle(int start) {
-      // Simple DFS with colour marking (0=white,1=grey,2=black).
       final colour = List.filled(n, 0);
-      final stack  = <(int, bool)>[(start, false)]; // (node, returning)
+      final stack  = <(int, bool)>[];
+      stack.add((start, false));
+
       while (stack.isNotEmpty) {
-        final (node, returning) = stack.removeLast();
-        if (returning) {
-          colour[node] = 2; // black — fully explored
-          continue;
-        }
-        if (colour[node] == 2) continue; // already done
-        if (colour[node] == 1) return true; // back-edge → cycle
-        colour[node] = 1; // grey — in stack
-        stack.add((node, true)); // schedule blackening
+        final (node, isReturn) = stack.removeLast();
+        if (isReturn)          { colour[node] = 2; continue; }
+        if (colour[node] == 2)   continue;
+        if (colour[node] == 1)   return true;
+
+        colour[node] = 1;
+        stack.add((node, true));
+
         for (final nb in adj[node]) {
-          if (colour[nb] != 2) stack.add((nb, false));
+          if (colour[nb] == 1) return true;
+          if (colour[nb] == 0) stack.add((nb, false));
         }
       }
       return false;
     }
 
-    // Backtracking search.
     bool backtrack(int idx) {
-      if (idx == n) return true; // all cells assigned
+      if (idx == n) return true;
 
-      // Try directions in random order.
       final dirs = ArrowDirection.values.toList()..shuffle(_rng);
 
       for (final dir in dirs) {
         final targets = rayTargets(idx, dir);
-
-        // Tentatively add edges idx → each target.
         for (final t in targets) adj[idx].add(t);
 
-        // Check for cycle starting from idx (only need to check from idx
-        // because new edges all originate there).
         if (!hasCycle(idx)) {
           assignment[idx] = dir;
           if (backtrack(idx + 1)) return true;
         }
 
-        // Undo.
         for (final t in targets) adj[idx].remove(t);
         assignment[idx] = null;
       }
 
-      return false; // no direction works — trigger backtrack
+      return false;
     }
 
     final solved = backtrack(0);
+    if (!solved) return _fallbackArrows(size);
 
-    if (!solved) {
-      // Extremely unlikely but fall back to a trivially solvable layout.
-      return _fallbackArrows(size);
-    }
-
-    // Build Arrow list from assignments.
     final arrows = <Arrow>[];
     for (int i = 0; i < n; i++) {
       arrows.add(Arrow(
@@ -351,10 +333,53 @@ class GameState extends ChangeNotifier {
         direction: assignment[i]!,
       ));
     }
+
+    if (!_isSolvable(arrows, size)) return _fallbackArrows(size);
     return arrows;
   }
 
-  // Fallback: top row fires up (always unblocked), rest fire down.
+  bool _isSolvable(List<Arrow> arrows, int size) {
+    final cleared  = List.filled(arrows.length, false);
+    int  remaining = arrows.length;
+
+    while (remaining > 0) {
+      bool progress = false;
+
+      for (int i = 0; i < arrows.length; i++) {
+        if (cleared[i]) continue;
+
+        final arrow = arrows[i];
+        final int dCol = _dc(arrow.direction);
+        final int dRow = _dr(arrow.direction);
+
+        bool blocked = false;
+        int  c       = arrow.col + dCol;
+        int  r       = arrow.row + dRow;
+        outer:
+        while (c >= 0 && c < size && r >= 0 && r < size) {
+          for (int j = 0; j < arrows.length; j++) {
+            if (!cleared[j] && arrows[j].col == c && arrows[j].row == r) {
+              blocked = true;
+              break outer;
+            }
+          }
+          c += dCol;
+          r += dRow;
+        }
+
+        if (!blocked) {
+          cleared[i] = true;
+          remaining--;
+          progress   = true;
+        }
+      }
+
+      if (!progress) return false;
+    }
+
+    return true;
+  }
+
   List<Arrow> _fallbackArrows(int size) {
     final arrows = <Arrow>[];
     int id = 0;
@@ -371,7 +396,6 @@ class GameState extends ChangeNotifier {
     return arrows;
   }
 
-  // Direction deltas (used by tapArrow)
   int _dc(ArrowDirection d) => switch (d) {
     ArrowDirection.left  => -1,
     ArrowDirection.right =>  1,
@@ -397,13 +421,11 @@ class GameState extends ChangeNotifier {
 
     final int size = _activeDifficulty.gridSize;
 
-    // All currently occupied cells except this arrow's own
     final occupied = <ArrowCell>{
       for (final a in _arrows)
         if (!a.cleared && a.id != arrowId) ...a.cells,
     };
 
-    // Walk exit ray from this cell
     int  c       = arrow.col + _dc(arrow.direction);
     int  r       = arrow.row + _dr(arrow.direction);
     bool blocked = false;
@@ -415,12 +437,16 @@ class GameState extends ChangeNotifier {
 
     if (blocked) {
       _lives--;
-      if (_lives <= 0) { _lives = 0; _gameOver = true; }
+      if (_lives <= 0) {
+        _lives    = 0;
+        _gameOver = true;
+        // Persist: game-over via collision
+        _storage.incrementGameOvers();
+      }
       notifyListeners();
       return TapResult.collision;
     }
 
-    // Animate out
     _isAnimating = true;
     _arrows[idx] = arrow.copyWith(animating: true);
     notifyListeners();
@@ -436,6 +462,8 @@ class GameState extends ChangeNotifier {
       if (_arrows.every((a) => a.cleared)) {
         _levelWon  = true;
         _score    += 50 + (_level * 20);
+        // Persist: level cleared
+        _storage.incrementLevelClears();
       }
       notifyListeners();
       onAnimationDone();

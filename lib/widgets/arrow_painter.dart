@@ -3,10 +3,6 @@ import '../models/game_state.dart';
 import '../themes/app_themes.dart';
 
 /// Paints one multi-cell snake arrow on a full-grid canvas.
-///
-/// The shaft visits every cell centre (tail → head), then pushes
-/// slightly past the head to form the arrowhead tip — so corners
-/// are always drawn and the head is never skipped.
 class SnakeArrowPainter extends CustomPainter {
   final Arrow  arrow;
   final Color  color;
@@ -37,21 +33,17 @@ class SnakeArrowPainter extends CustomPainter {
     if (opacity <= 0) return;
 
     final sw       = (cellSize * 0.12).clamp(2.0, 8.0);
-    final wingHalf = sw * 1.8;   // perpendicular spread of wing tips
-    final wingBack = sw * 2.2;   // how far back the wings sit from tip
-    final tipPush  = cellSize * 0.22; // tip extends past head centre
+    final wingHalf = sw * 1.8;
+    final wingBack = sw * 2.2;
+    final tipPush  = cellSize * 0.22;
 
     final dirVec     = _dirVec(arrow.direction);
     final headCentre = _centre(arrow.cells.last);
-    // Tip is pushed outward from the head cell centre
     final tip = Offset(
       headCentre.dx + dirVec.dx * tipPush,
       headCentre.dy + dirVec.dy * tipPush,
     );
 
-    // ── Shaft: tail centre → every cell centre → tip ──────────────────────
-    // We go through ALL cell centres including the head, then continue to tip.
-    // This ensures corners are never skipped.
     final linePaint = Paint()
       ..color       = color.withValues(alpha: opacity)
       ..strokeWidth = sw
@@ -61,7 +53,6 @@ class SnakeArrowPainter extends CustomPainter {
 
     final path = Path();
     if (arrow.cells.length == 1) {
-      // Single cell: short stub behind head, then to tip
       final behind = Offset(
         headCentre.dx - dirVec.dx * cellSize * 0.22,
         headCentre.dy - dirVec.dy * cellSize * 0.22,
@@ -70,21 +61,16 @@ class SnakeArrowPainter extends CustomPainter {
     } else {
       final first = _centre(arrow.cells.first);
       path.moveTo(first.dx, first.dy);
-      // All intermediate + head cell centres
       for (int i = 1; i < arrow.cells.length; i++) {
         final c = _centre(arrow.cells[i]);
         path.lineTo(c.dx, c.dy);
       }
     }
-    // Extend to tip so shaft and arrowhead share the same endpoint
     path.lineTo(tip.dx, tip.dy);
     canvas.drawPath(path, linePaint);
 
-    // ── Arrowhead: open V, wings radiate back from tip ────────────────────
-    // Perpendicular direction (rotated 90°)
     final perpX = -dirVec.dy;
     final perpY =  dirVec.dx;
-
     final wA = Offset(
       tip.dx - dirVec.dx * wingBack + perpX * wingHalf,
       tip.dy - dirVec.dy * wingBack + perpY * wingHalf,
@@ -101,7 +87,6 @@ class SnakeArrowPainter extends CustomPainter {
       ..strokeJoin  = StrokeJoin.round
       ..style       = PaintingStyle.stroke;
 
-    // wA → tip → wB as one continuous path
     final vPath = Path()
       ..moveTo(wA.dx, wA.dy)
       ..lineTo(tip.dx, tip.dy)

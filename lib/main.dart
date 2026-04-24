@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'dart:async' show unawaited;
 import 'models/game_state.dart';
 import 'models/settings_state.dart';
 import 'screens/home_screen.dart';
+import 'services/sound_service.dart';
+import 'services/ad_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(statusBarColor: Colors.transparent),
   );
+  unawaited(SoundService().init());
+  unawaited(AdService().init());
   runApp(const ArrowJamApp());
 }
 

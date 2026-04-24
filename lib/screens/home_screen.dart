@@ -4,10 +4,10 @@ import 'package:provider/provider.dart';
 import '../models/game_state.dart';
 import '../models/settings_state.dart';
 import '../themes/app_themes.dart';
+import '../services/storage_service.dart';
 import 'game_screen.dart';
 import 'settings_screen.dart';
 
-// Which sub-panel is showing on the home screen
 enum _Panel { none, difficulty, custom }
 
 class HomeScreen extends StatefulWidget {
@@ -18,6 +18,29 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   _Panel _panel = _Panel.none;
+
+  // Stats loaded from StorageService
+  int _gamesPlayed  = 0;
+  int _gameOvers    = 0;
+  int _levelClears  = 0;
+  bool _statsLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    final stats = await StorageService().loadAllStats();
+    if (!mounted) return;
+    setState(() {
+      _gamesPlayed  = stats['totalGamesPlayed']  ?? 0;
+      _gameOvers    = stats['totalGameOvers']     ?? 0;
+      _levelClears  = stats['totalLevelClears']   ?? 0;
+      _statsLoaded  = true;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,10 +98,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 const SizedBox(height: 20),
                 _MiniPreview(theme: theme),
+                const SizedBox(height: 20),
+
+                // Stats strip
+                _buildStats(theme),
 
                 const Spacer(flex: 2),
 
-                // ── Mode area ──────────────────────────────────────────────
+                // Mode area
                 if (_panel == _Panel.none)
                   _buildModeSelection(theme, gs)
                 else if (_panel == _Panel.difficulty)
@@ -95,7 +122,45 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Mode selection (3 cards) ─────────────────────────────────────────────
+  // ── Stats strip ───────────────────────────────────────────────────────────
+
+  Widget _buildStats(AppTheme theme) {
+    if (!_statsLoaded) {
+      return SizedBox(
+        height: 52,
+        child: Center(
+          child: SizedBox(
+            width: 16, height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              color: theme.textSecondary,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.gridLine),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _StatCell(label: 'GAMES',  value: '$_gamesPlayed', theme: theme),
+          _Divider(theme: theme),
+          _StatCell(label: 'CLEARS', value: '$_levelClears', theme: theme, accent: true),
+          _Divider(theme: theme),
+          _StatCell(label: 'OVERS',  value: '$_gameOvers',   theme: theme),
+        ],
+      ),
+    );
+  }
+
+  // ── Mode selection (3 cards) ──────────────────────────────────────────────
 
   Widget _buildModeSelection(AppTheme theme, GameState gs) {
     return Column(
@@ -144,7 +209,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Preset difficulty picker ─────────────────────────────────────────────
+  // ── Preset difficulty picker ──────────────────────────────────────────────
 
   Widget _buildDifficultyPicker(AppTheme theme, GameState gs) {
     return Column(
@@ -222,8 +287,6 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         _backRow(theme, 'CUSTOM GRID'),
         const SizedBox(height: 18),
-
-        // Size display
         Center(
           child: Text(
             '${size} × ${size}',
@@ -241,10 +304,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-
         const SizedBox(height: 12),
-
-        // Slider
         SliderTheme(
           data: SliderThemeData(
             activeTrackColor:   theme.accent,
@@ -262,8 +322,6 @@ class _HomeScreenState extends State<HomeScreen> {
             onChanged: (v) => gs.setCustom(v.round()),
           ),
         ),
-
-        // Size labels
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
@@ -278,7 +336,6 @@ class _HomeScreenState extends State<HomeScreen> {
             )).toList(),
           ),
         ),
-
         const SizedBox(height: 18),
         _playButton(
           theme: theme,
@@ -340,7 +397,66 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const GameScreen()),
-    ).then((_) => setState(() => _panel = _Panel.none));
+    ).then((_) {
+      setState(() => _panel = _Panel.none);
+      _loadStats(); // refresh stats when returning from a game
+    });
+  }
+}
+
+// ── Stat cell ─────────────────────────────────────────────────────────────────
+
+class _StatCell extends StatelessWidget {
+  final String   label;
+  final String   value;
+  final AppTheme theme;
+  final bool     accent;
+
+  const _StatCell({
+    required this.label,
+    required this.value,
+    required this.theme,
+    this.accent = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: GoogleFonts.spaceMono(
+            color: accent ? theme.accent : theme.textPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: GoogleFonts.spaceMono(
+            color: theme.textSecondary,
+            fontSize: 8,
+            letterSpacing: 1.5,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Divider extends StatelessWidget {
+  final AppTheme theme;
+  const _Divider({required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 28,
+      color: theme.gridLine,
+    );
   }
 }
 

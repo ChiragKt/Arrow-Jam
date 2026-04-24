@@ -6,6 +6,7 @@ import '../models/game_state.dart';
 import '../models/settings_state.dart';
 import '../themes/app_themes.dart';
 import '../widgets/arrow_grid.dart';
+import '../services/ad_service.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
@@ -17,10 +18,14 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> {
   Timer? _timer;
 
+  // Track whether a rewarded ad is available so the button updates live
+  bool _rewardedReady = false;
+
   @override
   void initState() {
     super.initState();
     _startTimer();
+    _pollRewardedReady();
   }
 
   @override
@@ -36,19 +41,34 @@ class _GameScreenState extends State<GameScreen> {
       if (!gs.gameOver && !gs.levelWon) {
         gs.tick();
       }
+      // Keep rewarded-ready flag in sync each tick
+      final ready = AdService().rewardedReady;
+      if (ready != _rewardedReady) {
+        setState(() => _rewardedReady = ready);
+      }
+    });
+  }
+
+  // Poll once per second so the button appears as soon as the ad loads
+  void _pollRewardedReady() {
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return false;
+      final ready = AdService().rewardedReady;
+      if (ready != _rewardedReady) {
+        setState(() => _rewardedReady = ready);
+      }
+      return true; // keep polling
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsState>();
-    final theme = AppThemes.byId(settings.themeId);
-    final gs = context.watch<GameState>();
+    final theme    = AppThemes.byId(settings.themeId);
+    final gs       = context.watch<GameState>();
 
-    // Restart timer when next level starts
-    if (gs.levelWon) {
-      _timer?.cancel();
-    }
+    if (gs.levelWon) _timer?.cancel();
 
     return Scaffold(
       body: Container(
@@ -93,10 +113,8 @@ class _GameScreenState extends State<GameScreen> {
                   _buildLivesBar(theme, gs),
                 ],
               ),
-              if (gs.levelWon)
-                _buildOverlay(theme, gs, won: true),
-              if (gs.gameOver)
-                _buildOverlay(theme, gs, won: false),
+              if (gs.levelWon)  _buildOverlay(theme, gs, won: true),
+              if (gs.gameOver)  _buildOverlay(theme, gs, won: false),
             ],
           ),
         ),
@@ -104,8 +122,10 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  // ── HUD ───────────────────────────────────────────────────────────────────
+
   Widget _buildHUD(AppTheme theme, GameState gs) {
-    final timeRatio = gs.timeRemaining / gs.difficulty.timeSeconds;
+    final timeRatio  = gs.timeRemaining / gs.difficulty.timeSeconds;
     final timerColor = timeRatio > 0.5
         ? theme.accent
         : timeRatio > 0.25
@@ -116,42 +136,33 @@ class _GameScreenState extends State<GameScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Row(
         children: [
-          // Back
           GestureDetector(
-            onTap: () {
-              _timer?.cancel();
-              Navigator.pop(context);
-            },
+            onTap: () { _timer?.cancel(); Navigator.pop(context); },
             child: Icon(Icons.close, color: theme.textSecondary, size: 22),
           ),
           const Spacer(),
-          // Level
           Text(
             'LVL ${gs.level}',
             style: GoogleFonts.spaceMono(
-              color: theme.textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 2,
+              color: theme.textPrimary, fontSize: 14,
+              fontWeight: FontWeight.w700, letterSpacing: 2,
             ),
           ),
           const SizedBox(width: 20),
-          // Timer
           _TimerBadge(seconds: gs.timeRemaining, color: timerColor, theme: theme),
           const Spacer(),
-          // Score
           Text(
             '${gs.score}',
             style: GoogleFonts.spaceMono(
-              color: theme.accent,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+              color: theme.accent, fontSize: 14, fontWeight: FontWeight.w700,
             ),
           ),
         ],
       ),
     );
   }
+
+  // ── Lives bar ─────────────────────────────────────────────────────────────
 
   Widget _buildLivesBar(AppTheme theme, GameState gs) {
     return Padding(
@@ -181,6 +192,8 @@ class _GameScreenState extends State<GameScreen> {
       ),
     );
   }
+
+  // ── Overlay (level won / game over) ───────────────────────────────────────
 
   Widget _buildOverlay(AppTheme theme, GameState gs, {required bool won}) {
     return Container(
@@ -213,20 +226,19 @@ class _GameScreenState extends State<GameScreen> {
                 won ? 'CLEARED' : 'GAME OVER',
                 style: GoogleFonts.spaceMono(
                   color: won ? theme.accent : Colors.red,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 3,
+                  fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: 3,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 'Score: ${gs.score}',
                 style: GoogleFonts.spaceMono(
-                  color: theme.textSecondary,
-                  fontSize: 12,
+                  color: theme.textSecondary, fontSize: 12,
                 ),
               ),
               const SizedBox(height: 22),
+
+              // ── Level won ───────────────────────────────────────────────
               if (won) ...[
                 _overlayBtn(
                   label: 'NEXT LEVEL',
@@ -234,27 +246,71 @@ class _GameScreenState extends State<GameScreen> {
                   textDark: !theme.isDark,
                   theme: theme,
                   onTap: () {
+                    AdService().maybeShowInterstitial(gs.level);
                     gs.nextLevel();
                     _startTimer();
                   },
                 ),
                 const SizedBox(height: 10),
+                _overlayBtn(
+                  label: 'QUIT',
+                  color: Colors.transparent,
+                  textDark: false,
+                  outlined: true,
+                  theme: theme,
+                  onTap: () => Navigator.pop(context),
+                ),
               ],
-              _overlayBtn(
-                label: won ? 'QUIT' : 'TRY AGAIN',
-                color: won ? Colors.transparent : theme.accent,
-                textDark: !theme.isDark && !won,
-                outlined: won,
-                theme: theme,
-                onTap: () {
-                  if (won) {
-                    Navigator.pop(context);
-                  } else {
+
+              // ── Game over ───────────────────────────────────────────────
+              if (!won) ...[
+                // Watch ad → continue with 1 heart (only shown when ad is ready)
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: _rewardedReady
+                      ? Column(
+                          key: const ValueKey('adBtn'),
+                          children: [
+                            _overlayBtn(
+                              label: '▶  CONTINUE  (AD)',
+                              color: const Color(0xFFFFAA00),
+                              textDark: true,
+                              theme: theme,
+                              onTap: () {
+                                AdService().showRewarded(
+                                  onRewarded: () {
+                                    gs.continueAfterGameOver();
+                                    setState(() => _rewardedReady = false);
+                                    _startTimer();
+                                  },
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 10),
+                          ],
+                        )
+                      : const SizedBox.shrink(key: ValueKey('noAdBtn')),
+                ),
+                _overlayBtn(
+                  label: 'TRY AGAIN',
+                  color: theme.accent,
+                  textDark: !theme.isDark,
+                  theme: theme,
+                  onTap: () {
                     gs.resetGame();
                     _startTimer();
-                  }
-                },
-              ),
+                  },
+                ),
+                const SizedBox(height: 10),
+                _overlayBtn(
+                  label: 'QUIT',
+                  color: Colors.transparent,
+                  textDark: false,
+                  outlined: true,
+                  theme: theme,
+                  onTap: () => Navigator.pop(context),
+                ),
+              ],
             ],
           ),
         ),
@@ -262,11 +318,13 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  // ── Button helper ─────────────────────────────────────────────────────────
+
   Widget _overlayBtn({
-    required String label,
-    required Color color,
-    required bool textDark,
-    required AppTheme theme,
+    required String       label,
+    required Color        color,
+    required bool         textDark,
+    required AppTheme     theme,
     required VoidCallback onTap,
     bool outlined = false,
   }) {
@@ -300,9 +358,11 @@ class _GameScreenState extends State<GameScreen> {
   }
 }
 
+// ── Timer badge ───────────────────────────────────────────────────────────────
+
 class _TimerBadge extends StatelessWidget {
-  final int seconds;
-  final Color color;
+  final int      seconds;
+  final Color    color;
   final AppTheme theme;
   const _TimerBadge({required this.seconds, required this.color, required this.theme});
 
@@ -324,9 +384,7 @@ class _TimerBadge extends StatelessWidget {
           Text(
             '${seconds}s',
             style: GoogleFonts.spaceMono(
-              color: color,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
+              color: color, fontSize: 13, fontWeight: FontWeight.w700,
             ),
           ),
         ],

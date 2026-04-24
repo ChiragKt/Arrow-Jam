@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/game_state.dart';
+import '../models/settings_state.dart';
 import '../themes/app_themes.dart';
+import '../services/sound_service.dart';
 import 'arrow_painter.dart';
+import 'package:provider/provider.dart';
 
 class ArrowGrid extends StatefulWidget {
   final GameState gs;
@@ -231,13 +234,23 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
                   onTap: (arrow.cleared || arrow.animating || isFlying)
                       ? null
                       : () {
+                          final settings = context.read<SettingsState>();
+                          final sound    = SoundService();
+                          sound.setMuted(!settings.soundEnabled);
+
                           final result = widget.gs.tapArrow(arrow.id, () {
                             if (mounted) setState(() {});
                           });
                           if (result == TapResult.cleared) {
                             _startFly(arrow.id, arrow.direction);
+                            sound.play(GameSound.tapClear);
                           } else if (result == TapResult.collision) {
                             _startShake(arrow.id);
+                            sound.play(GameSound.collision);
+                          }
+                          // Play level-win sound when the level is just won
+                          if (widget.gs.levelWon) {
+                            sound.play(GameSound.levelWin);
                           }
                         },
                 ),

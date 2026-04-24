@@ -1,5 +1,31 @@
 import 'package:flutter/material.dart';
 
+// ── ThemeIcons ────────────────────────────────────────────────────────────────
+// Each theme can have a set of emoji icons that replace the plain arrow heads,
+// giving each theme its own visual personality.
+// [up], [down], [left], [right] map to the four arrow directions.
+
+class ThemeIcons {
+  final String up;
+  final String down;
+  final String left;
+  final String right;
+
+  const ThemeIcons({
+    required this.up,
+    required this.down,
+    required this.left,
+    required this.right,
+  });
+
+  String forDirection(ArrowDirection dir) => switch (dir) {
+    ArrowDirection.up    => up,
+    ArrowDirection.down  => down,
+    ArrowDirection.left  => left,
+    ArrowDirection.right => right,
+  };
+}
+
 class AppTheme {
   final String id;
   final String name;
@@ -17,6 +43,8 @@ class AppTheme {
   final Color lifeActive;
   final bool isDark;
   final List<Color> bgGradient;
+  // Optional themed icons — null means render classic arrow shape
+  final ThemeIcons? themeIcons;
 
   const AppTheme({
     required this.id,
@@ -35,6 +63,7 @@ class AppTheme {
     required this.lifeActive,
     required this.isDark,
     required this.bgGradient,
+    this.themeIcons,
   });
 
   Color arrowColor(ArrowDirection dir) {
@@ -68,6 +97,7 @@ class AppThemes {
       lifeActive: Color(0xFFFF3CAC),
       isDark: true,
       bgGradient: [Color(0xFF070714), Color(0xFF0D0D28)],
+      // Neon: lightning / energy — no icons, classic arrows look best
     ),
     AppTheme(
       id: 'lava',
@@ -86,6 +116,7 @@ class AppThemes {
       lifeActive: Color(0xFFFF3000),
       isDark: true,
       bgGradient: [Color(0xFF110500), Color(0xFF200800)],
+      themeIcons: ThemeIcons(up: '🔥', down: '💥', left: '🌋', right: '☄️'),
     ),
     AppTheme(
       id: 'arctic',
@@ -104,6 +135,7 @@ class AppThemes {
       lifeActive: Color(0xFF0055CC),
       isDark: false,
       bgGradient: [Color(0xFFEDF4FB), Color(0xFFD8EEF8)],
+      themeIcons: ThemeIcons(up: '🐧', down: '❄️', left: '🦭', right: '🐋'),
     ),
     AppTheme(
       id: 'forest',
@@ -122,6 +154,7 @@ class AppThemes {
       lifeActive: Color(0xFF44FF88),
       isDark: true,
       bgGradient: [Color(0xFF060E06), Color(0xFF0A160A)],
+      themeIcons: ThemeIcons(up: '🦅', down: '🐸', left: '🐺', right: '🦊'),
     ),
     AppTheme(
       id: 'retro',
@@ -140,6 +173,7 @@ class AppThemes {
       lifeActive: Color(0xFFFF4444),
       isDark: true,
       bgGradient: [Color(0xFF1A1A1A), Color(0xFF222222)],
+      themeIcons: ThemeIcons(up: '👾', down: '🕹️', left: '👈', right: '👉'),
     ),
     AppTheme(
       id: 'sakura',
@@ -158,6 +192,47 @@ class AppThemes {
       lifeActive: Color(0xFFDD1166),
       isDark: false,
       bgGradient: [Color(0xFFFFF5F8), Color(0xFFFFEEF4)],
+      themeIcons: ThemeIcons(up: '🌸', down: '🌺', left: '🦋', right: '🌷'),
+    ),
+    // ── Traffic theme (new) ────────────────────────────────────────────────
+    AppTheme(
+      id: 'traffic',
+      name: 'Traffic',
+      emoji: '🚦',
+      background: Color(0xFF111820),
+      gridLine: Color(0xFF1E2D3D),
+      arrowUp: Color(0xFF00CC55),
+      arrowDown: Color(0xFFFF3333),
+      arrowLeft: Color(0xFFFFAA00),
+      arrowRight: Color(0xFF3399FF),
+      accent: Color(0xFF00CC55),
+      textPrimary: Color(0xFFE8F4FF),
+      textSecondary: Color(0xFF4A6480),
+      cardBg: Color(0xFF182030),
+      lifeActive: Color(0xFFFF3333),
+      isDark: true,
+      bgGradient: [Color(0xFF111820), Color(0xFF182030)],
+      themeIcons: ThemeIcons(up: '🚗', down: '🚕', left: '🚙', right: '🚌'),
+    ),
+    // ── Space theme (new) ──────────────────────────────────────────────────
+    AppTheme(
+      id: 'space',
+      name: 'Space',
+      emoji: '🚀',
+      background: Color(0xFF020408),
+      gridLine: Color(0xFF0A1020),
+      arrowUp: Color(0xFFAADDFF),
+      arrowDown: Color(0xFFFF66AA),
+      arrowLeft: Color(0xFF8855FF),
+      arrowRight: Color(0xFFFFDD44),
+      accent: Color(0xFFAADDFF),
+      textPrimary: Color(0xFFDDEEFF),
+      textSecondary: Color(0xFF334466),
+      cardBg: Color(0xFF050C18),
+      lifeActive: Color(0xFFFF66AA),
+      isDark: true,
+      bgGradient: [Color(0xFF020408), Color(0xFF050C18)],
+      themeIcons: ThemeIcons(up: '🚀', down: '🛸', left: '🛩️', right: '☄️'),
     ),
   ];
 
