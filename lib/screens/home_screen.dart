@@ -4,10 +4,10 @@ import 'package:provider/provider.dart';
 import '../models/game_state.dart';
 import '../models/settings_state.dart';
 import '../themes/app_themes.dart';
-import '../services/storage_service.dart';
 import 'game_screen.dart';
 import 'settings_screen.dart';
 
+// Which sub-panel is showing on the home screen
 enum _Panel { none, difficulty, custom }
 
 class HomeScreen extends StatefulWidget {
@@ -19,34 +19,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   _Panel _panel = _Panel.none;
 
-  // Stats loaded from StorageService
-  int _gamesPlayed  = 0;
-  int _gameOvers    = 0;
-  int _levelClears  = 0;
-  bool _statsLoaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadStats();
-  }
-
-  Future<void> _loadStats() async {
-    final stats = await StorageService().loadAllStats();
-    if (!mounted) return;
-    setState(() {
-      _gamesPlayed  = stats['totalGamesPlayed']  ?? 0;
-      _gameOvers    = stats['totalGameOvers']     ?? 0;
-      _levelClears  = stats['totalLevelClears']   ?? 0;
-      _statsLoaded  = true;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsState>();
-    final gs       = context.watch<GameState>();
-    final theme    = AppThemes.byId(settings.themeId);
+    final gs = context.watch<GameState>();
+    final theme = AppThemes.byId(settings.themeId);
 
     return Scaffold(
       body: Container(
@@ -54,7 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
           gradient: LinearGradient(
             colors: theme.bgGradient,
             begin: Alignment.topLeft,
-            end:   Alignment.bottomRight,
+            end: Alignment.bottomRight,
           ),
         ),
         child: SafeArea(
@@ -70,9 +47,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: GestureDetector(
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                        MaterialPageRoute(
+                            builder: (_) => const SettingsScreen()),
                       ),
-                      child: Icon(Icons.tune, color: theme.textSecondary, size: 24),
+                      child: Icon(Icons.tune,
+                          color: theme.textSecondary, size: 24),
                     ),
                   ),
                 ),
@@ -83,29 +62,30 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   'ARROW',
                   style: GoogleFonts.spaceMono(
-                    color: theme.accent, fontSize: 44,
-                    fontWeight: FontWeight.w700, letterSpacing: 8, height: 1.0,
+                    color: theme.accent,
+                    fontSize: 44,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 8,
+                    height: 1.0,
                   ),
                 ),
                 Text(
                   'JAM',
                   style: GoogleFonts.spaceMono(
                     color: theme.textPrimary.withValues(alpha: 0.35),
-                    fontSize: 44, fontWeight: FontWeight.w300,
-                    letterSpacing: 16, height: 1.0,
+                    fontSize: 44,
+                    fontWeight: FontWeight.w300,
+                    letterSpacing: 16,
+                    height: 1.0,
                   ),
                 ),
 
                 const SizedBox(height: 20),
                 _MiniPreview(theme: theme),
-                const SizedBox(height: 20),
-
-                // Stats strip
-                _buildStats(theme),
 
                 const Spacer(flex: 2),
 
-                // Mode area
+                // ── Mode area ──────────────────────────────────────────────
                 if (_panel == _Panel.none)
                   _buildModeSelection(theme, gs)
                 else if (_panel == _Panel.difficulty)
@@ -122,45 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Stats strip ───────────────────────────────────────────────────────────
-
-  Widget _buildStats(AppTheme theme) {
-    if (!_statsLoaded) {
-      return SizedBox(
-        height: 52,
-        child: Center(
-          child: SizedBox(
-            width: 16, height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 1.5,
-              color: theme.textSecondary,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: theme.cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.gridLine),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _StatCell(label: 'GAMES',  value: '$_gamesPlayed', theme: theme),
-          _Divider(theme: theme),
-          _StatCell(label: 'CLEARS', value: '$_levelClears', theme: theme, accent: true),
-          _Divider(theme: theme),
-          _StatCell(label: 'OVERS',  value: '$_gameOvers',   theme: theme),
-        ],
-      ),
-    );
-  }
-
-  // ── Mode selection (3 cards) ──────────────────────────────────────────────
+  // ── Mode selection (3 cards) ─────────────────────────────────────────────
 
   Widget _buildModeSelection(AppTheme theme, GameState gs) {
     return Column(
@@ -168,7 +110,9 @@ class _HomeScreenState extends State<HomeScreen> {
         Text(
           'HOW DO YOU WANT TO PLAY?',
           style: GoogleFonts.spaceMono(
-            color: theme.textSecondary, fontSize: 10, letterSpacing: 2,
+            color: theme.textSecondary,
+            fontSize: 10,
+            letterSpacing: 2,
           ),
         ),
         const SizedBox(height: 16),
@@ -176,7 +120,9 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Expanded(
               child: _ModeCard(
-                emoji: '🎲', label: 'RANDOM', sub: 'Surprise difficulty',
+                emoji: '🎲',
+                label: 'RANDOM',
+                sub: 'Surprise difficulty',
                 theme: theme,
                 onTap: () {
                   gs.setRandomDifficulty(true);
@@ -187,7 +133,9 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: _ModeCard(
-                emoji: '🎯', label: 'SELECT', sub: 'Choose difficulty',
+                emoji: '🎯',
+                label: 'SELECT',
+                sub: 'Choose difficulty',
                 theme: theme,
                 onTap: () {
                   gs.setRandomDifficulty(false);
@@ -198,7 +146,9 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: _ModeCard(
-                emoji: '🔧', label: 'CUSTOM', sub: 'Pick grid size',
+                emoji: '🔧',
+                label: 'CUSTOM',
+                sub: 'Pick grid size',
                 theme: theme,
                 onTap: () => setState(() => _panel = _Panel.custom),
               ),
@@ -209,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Preset difficulty picker ──────────────────────────────────────────────
+  // ── Preset difficulty picker ─────────────────────────────────────────────
 
   Widget _buildDifficultyPicker(AppTheme theme, GameState gs) {
     return Column(
@@ -218,13 +168,13 @@ class _HomeScreenState extends State<HomeScreen> {
         _backRow(theme, 'DIFFICULTY'),
         const SizedBox(height: 12),
         ...List.generate(kDifficulties.length, (i) {
-          final d        = kDifficulties[i];
+          final d = kDifficulties[i];
           final selected = gs.difficultyIndex == i && !gs.isCustom;
           return GestureDetector(
             onTap: () => gs.setDifficulty(i),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              margin:  const EdgeInsets.only(bottom: 8),
+              margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: selected
@@ -248,19 +198,22 @@ class _HomeScreenState extends State<HomeScreen> {
                           d.label.toUpperCase(),
                           style: GoogleFonts.spaceMono(
                             color: selected ? theme.accent : theme.textPrimary,
-                            fontSize: 12, fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         Text(
                           '${d.gridSize}×${d.gridSize}  •  ${d.timeSeconds}s  •  ${d.lives} lives',
                           style: GoogleFonts.spaceMono(
-                            color: theme.textSecondary, fontSize: 9,
+                            color: theme.textSecondary,
+                            fontSize: 9,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  if (selected) Icon(Icons.check, color: theme.accent, size: 16),
+                  if (selected)
+                    Icon(Icons.check, color: theme.accent, size: 16),
                 ],
               ),
             ),
@@ -287,11 +240,15 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         _backRow(theme, 'CUSTOM GRID'),
         const SizedBox(height: 18),
+
+        // Size display
         Center(
           child: Text(
-            '${size} × ${size}',
+            '$size × $size',
             style: GoogleFonts.spaceMono(
-              color: theme.accent, fontSize: 36, fontWeight: FontWeight.w700,
+              color: theme.accent,
+              fontSize: 36,
+              fontWeight: FontWeight.w700,
               letterSpacing: 4,
             ),
           ),
@@ -300,46 +257,56 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Text(
             '${size * size} cells  •  ~${(size * size * 2.5).toInt()}s  •  ${(size / 2).ceil().clamp(2, 6)} lives',
             style: GoogleFonts.spaceMono(
-              color: theme.textSecondary, fontSize: 10,
+              color: theme.textSecondary,
+              fontSize: 10,
             ),
           ),
         ),
+
         const SizedBox(height: 12),
+
+        // Slider
         SliderTheme(
           data: SliderThemeData(
-            activeTrackColor:   theme.accent,
+            activeTrackColor: theme.accent,
             inactiveTrackColor: theme.gridLine,
-            thumbColor:         theme.accent,
-            overlayColor:       theme.accent.withValues(alpha: 0.15),
-            thumbShape:  const RoundSliderThumbShape(enabledThumbRadius: 10),
+            thumbColor: theme.accent,
+            overlayColor: theme.accent.withValues(alpha: 0.15),
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
             trackHeight: 4,
           ),
           child: Slider(
-            value:    size.toDouble(),
-            min:      3,
-            max:      10,
+            value: size.toDouble(),
+            min: 3,
+            max: 10,
             divisions: 7,
             onChanged: (v) => gs.setCustom(v.round()),
           ),
         ),
+
+        // Size labels
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [3, 4, 5, 6, 7, 8, 9, 10].map((s) => Text(
-              '$s',
-              style: GoogleFonts.spaceMono(
-                color: s == size ? theme.accent : theme.textSecondary,
-                fontSize: 9,
-                fontWeight: s == size ? FontWeight.w700 : FontWeight.w400,
-              ),
-            )).toList(),
+            children: [3, 4, 5, 6, 7, 8, 9, 10]
+                .map((s) => Text(
+                      '$s',
+                      style: GoogleFonts.spaceMono(
+                        color: s == size ? theme.accent : theme.textSecondary,
+                        fontSize: 9,
+                        fontWeight:
+                            s == size ? FontWeight.w700 : FontWeight.w400,
+                      ),
+                    ))
+                .toList(),
           ),
         ),
+
         const SizedBox(height: 18),
         _playButton(
           theme: theme,
-          label: 'PLAY  •  ${size}×${size}',
+          label: 'PLAY  •  $size×$size',
           onTap: () => _navigateToGame(gs),
         ),
       ],
@@ -353,13 +320,16 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         GestureDetector(
           onTap: () => setState(() => _panel = _Panel.none),
-          child: Icon(Icons.arrow_back_ios, color: theme.textSecondary, size: 16),
+          child:
+              Icon(Icons.arrow_back_ios, color: theme.textSecondary, size: 16),
         ),
         const SizedBox(width: 8),
         Text(
           label,
           style: GoogleFonts.spaceMono(
-            color: theme.textSecondary, fontSize: 10, letterSpacing: 2,
+            color: theme.textSecondary,
+            fontSize: 10,
+            letterSpacing: 2,
           ),
         ),
       ],
@@ -368,7 +338,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _playButton({
     required AppTheme theme,
-    required String   label,
+    required String label,
     required VoidCallback onTap,
   }) {
     return SizedBox(
@@ -378,14 +348,17 @@ class _HomeScreenState extends State<HomeScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: theme.accent,
           foregroundColor: theme.isDark ? Colors.black : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           elevation: 0,
         ),
         onPressed: onTap,
         child: Text(
           label,
           style: GoogleFonts.spaceMono(
-            fontWeight: FontWeight.w700, fontSize: 14, letterSpacing: 3,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+            letterSpacing: 3,
           ),
         ),
       ),
@@ -397,74 +370,15 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const GameScreen()),
-    ).then((_) {
-      setState(() => _panel = _Panel.none);
-      _loadStats(); // refresh stats when returning from a game
-    });
-  }
-}
-
-// ── Stat cell ─────────────────────────────────────────────────────────────────
-
-class _StatCell extends StatelessWidget {
-  final String   label;
-  final String   value;
-  final AppTheme theme;
-  final bool     accent;
-
-  const _StatCell({
-    required this.label,
-    required this.value,
-    required this.theme,
-    this.accent = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.spaceMono(
-            color: accent ? theme.accent : theme.textPrimary,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: GoogleFonts.spaceMono(
-            color: theme.textSecondary,
-            fontSize: 8,
-            letterSpacing: 1.5,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Divider extends StatelessWidget {
-  final AppTheme theme;
-  const _Divider({required this.theme});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 28,
-      color: theme.gridLine,
-    );
+    ).then((_) => setState(() => _panel = _Panel.none));
   }
 }
 
 // ── Mode card ─────────────────────────────────────────────────────────────────
 
 class _ModeCard extends StatelessWidget {
-  final String       emoji, label, sub;
-  final AppTheme     theme;
+  final String emoji, label, sub;
+  final AppTheme theme;
   final VoidCallback onTap;
 
   const _ModeCard({
@@ -493,15 +407,18 @@ class _ModeCard extends StatelessWidget {
             Text(
               label,
               style: GoogleFonts.spaceMono(
-                color: theme.textPrimary, fontSize: 10,
-                fontWeight: FontWeight.w700, letterSpacing: 2,
+                color: theme.textPrimary,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 2,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               sub,
               style: GoogleFonts.spaceMono(
-                color: theme.textSecondary, fontSize: 8,
+                color: theme.textSecondary,
+                fontSize: 8,
               ),
               textAlign: TextAlign.center,
             ),
@@ -533,7 +450,8 @@ class _MiniPreview extends StatelessWidget {
     ];
 
     return SizedBox(
-      width: 130, height: 130,
+      width: 130,
+      height: 130,
       child: Container(
         decoration: BoxDecoration(
           color: theme.background,
@@ -551,11 +469,14 @@ class _MiniPreview extends StatelessWidget {
               ...arrows.map((a) {
                 final (col, row, dir) = a;
                 return Positioned(
-                  left: col * cell, top: row * cell,
+                  left: col * cell,
+                  top: row * cell,
                   child: SizedBox(
-                    width: cell, height: cell,
+                    width: cell,
+                    height: cell,
                     child: CustomPaint(
-                      painter: _MiniArrow(dir: dir, color: theme.arrowColor(dir)),
+                      painter:
+                          _MiniArrow(dir: dir, color: theme.arrowColor(dir)),
                     ),
                   ),
                 );
@@ -569,48 +490,69 @@ class _MiniPreview extends StatelessWidget {
 }
 
 class _MiniGrid extends CustomPainter {
-  final int n; final Color color;
+  final int n;
+  final Color color;
   _MiniGrid({required this.n, required this.color});
   @override
   void paint(Canvas canvas, Size size) {
-    final p    = Paint()..color = color..strokeWidth = 0.5;
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = 0.5;
     final cell = size.width / n;
     for (int i = 0; i <= n; i++) {
-      canvas.drawLine(Offset(i*cell, 0), Offset(i*cell, size.height), p);
-      canvas.drawLine(Offset(0, i*cell), Offset(size.width, i*cell), p);
+      canvas.drawLine(Offset(i * cell, 0), Offset(i * cell, size.height), p);
+      canvas.drawLine(Offset(0, i * cell), Offset(size.width, i * cell), p);
     }
   }
-  @override bool shouldRepaint(_) => false;
+
+  @override
+  bool shouldRepaint(_) => false;
 }
 
 class _MiniArrow extends CustomPainter {
-  final ArrowDirection dir; final Color color;
+  final ArrowDirection dir;
+  final Color color;
   _MiniArrow({required this.dir, required this.color});
   @override
   void paint(Canvas canvas, Size size) {
     final p = Paint()
-      ..color = color ..strokeWidth = size.width * 0.10
-      ..strokeCap = StrokeCap.round ..style = PaintingStyle.stroke;
-    final cx = size.width/2; final cy = size.height/2;
-    final len = size.width*0.28; final hw = size.width*0.14; final hl = size.width*0.18;
+      ..color = color
+      ..strokeWidth = size.width * 0.10
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final len = size.width * 0.28;
+    final hw = size.width * 0.14;
+    final hl = size.width * 0.18;
     late Offset tail, tip, wA, wB;
     switch (dir) {
       case ArrowDirection.up:
-        tail=Offset(cx,cy+len); tip=Offset(cx,cy-len);
-        wA=Offset(cx-hw,cy-len+hl); wB=Offset(cx+hw,cy-len+hl);
+        tail = Offset(cx, cy + len);
+        tip = Offset(cx, cy - len);
+        wA = Offset(cx - hw, cy - len + hl);
+        wB = Offset(cx + hw, cy - len + hl);
       case ArrowDirection.down:
-        tail=Offset(cx,cy-len); tip=Offset(cx,cy+len);
-        wA=Offset(cx-hw,cy+len-hl); wB=Offset(cx+hw,cy+len-hl);
+        tail = Offset(cx, cy - len);
+        tip = Offset(cx, cy + len);
+        wA = Offset(cx - hw, cy + len - hl);
+        wB = Offset(cx + hw, cy + len - hl);
       case ArrowDirection.left:
-        tail=Offset(cx+len,cy); tip=Offset(cx-len,cy);
-        wA=Offset(cx-len+hl,cy-hw); wB=Offset(cx-len+hl,cy+hw);
+        tail = Offset(cx + len, cy);
+        tip = Offset(cx - len, cy);
+        wA = Offset(cx - len + hl, cy - hw);
+        wB = Offset(cx - len + hl, cy + hw);
       case ArrowDirection.right:
-        tail=Offset(cx-len,cy); tip=Offset(cx+len,cy);
-        wA=Offset(cx+len-hl,cy-hw); wB=Offset(cx+len-hl,cy+hw);
+        tail = Offset(cx - len, cy);
+        tip = Offset(cx + len, cy);
+        wA = Offset(cx + len - hl, cy - hw);
+        wB = Offset(cx + len - hl, cy + hw);
     }
     canvas.drawLine(tail, tip, p);
     canvas.drawLine(tip, wA, p);
     canvas.drawLine(tip, wB, p);
   }
-  @override bool shouldRepaint(_) => false;
+
+  @override
+  bool shouldRepaint(_) => false;
 }

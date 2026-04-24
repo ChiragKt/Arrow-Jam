@@ -1,9 +1,13 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 /// Manages interstitial and rewarded ads (Android only).
 ///
-/// Uses Google's official test IDs — swap in your real Ad Unit IDs
-/// from AdMob (admob.google.com) before releasing to the store.
+/// In DEBUG builds, Google's official test IDs are used automatically so ads
+/// load on any device without AdMob registration.
+/// In RELEASE builds, the real Ad Unit IDs are used — make sure the device
+/// is NOT in test mode and the app is linked to your AdMob account.
 ///
 /// Wiring:
 ///   1. Call `await AdService().init()` once in main().
@@ -15,10 +19,16 @@ class AdService {
   factory AdService() => _instance;
   AdService._();
 
-  // ── Android test Ad Unit IDs ──────────────────────────────────────────────
-  // Replace these with your real IDs before publishing.
-  static const _interstitialId = 'ca-app-pub-2965683825685047/5214114487';
-  static const _rewardedId = 'ca-app-pub-2965683825685047/5677148916';
+  // ── Ad Unit IDs ───────────────────────────────────────────────────────────
+  // Debug → Google's universal test IDs (load on any device, no AdMob setup needed).
+  // Release → your real Ad Unit IDs from admob.google.com.
+  static const _interstitialId = kDebugMode
+      ? 'ca-app-pub-3940256099942544/1033173712' // Google test interstitial
+      : 'ca-app-pub-2965683825685047/5214114487'; // your real ID
+
+  static const _rewardedId = kDebugMode
+      ? 'ca-app-pub-3940256099942544/5224354917' // Google test rewarded
+      : 'ca-app-pub-2965683825685047/5677148916'; // your real ID
 
   InterstitialAd? _interstitial;
   RewardedAd? _rewarded;
@@ -62,7 +72,8 @@ class AdService {
             },
           );
         },
-        onAdFailedToLoad: (_) {
+        onAdFailedToLoad: (err) {
+          debugPrint('[AdService] Interstitial failed to load: $err');
           _interstitialReady = false;
           Future.delayed(const Duration(seconds: 30), _loadInterstitial);
         },
@@ -107,7 +118,8 @@ class AdService {
             },
           );
         },
-        onAdFailedToLoad: (_) {
+        onAdFailedToLoad: (err) {
+          debugPrint('[AdService] Rewarded failed to load: $err');
           _rewardedReady = false;
           Future.delayed(const Duration(seconds: 30), _loadRewarded);
         },

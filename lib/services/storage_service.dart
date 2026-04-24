@@ -1,3 +1,4 @@
+import 'package:arrow_jam/services/ad_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Persists player statistics on-device using SharedPreferences.
@@ -12,7 +13,7 @@ class StorageService {
   StorageService._();
 
   static const _kGamesPlayed = 'totalGamesPlayed';
-  static const _kGameOvers   = 'totalGameOvers';
+  static const _kGameOvers = 'totalGameOvers';
   static const _kLevelClears = 'totalLevelClears';
 
   // ── Getters ───────────────────────────────────────────────────────────────
@@ -37,7 +38,7 @@ class StorageService {
     final p = await SharedPreferences.getInstance();
     return {
       'totalGamesPlayed': p.getInt(_kGamesPlayed) ?? 0,
-      'totalGameOvers':   p.getInt(_kGameOvers)   ?? 0,
+      'totalGameOvers': p.getInt(_kGameOvers) ?? 0,
       'totalLevelClears': p.getInt(_kLevelClears) ?? 0,
     };
   }

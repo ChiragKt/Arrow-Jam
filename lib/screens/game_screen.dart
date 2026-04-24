@@ -264,33 +264,28 @@ class _GameScreenState extends State<GameScreen> {
 
               // ── Game over ───────────────────────────────────────────────
               if (!won) ...[
-                // Watch ad → continue with 1 heart (only shown when ad is ready)
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: _rewardedReady
-                      ? Column(
-                          key: const ValueKey('adBtn'),
-                          children: [
-                            _overlayBtn(
-                              label: '▶  CONTINUE  (AD)',
-                              color: const Color(0xFFFFAA00),
-                              textDark: true,
-                              theme: theme,
-                              onTap: () {
-                                AdService().showRewarded(
-                                  onRewarded: () {
-                                    gs.continueAfterGameOver();
-                                    setState(() => _rewardedReady = false);
-                                    _startTimer();
-                                  },
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 10),
-                          ],
-                        )
-                      : const SizedBox.shrink(key: ValueKey('noAdBtn')),
+                // Watch ad → continue with 1 heart (always visible; grayed when not ready)
+                _overlayBtn(
+                  label: _rewardedReady ? '▶  CONTINUE  (AD)' : '⏳  LOADING AD...',
+                  color: _rewardedReady
+                      ? const Color(0xFFFFAA00)
+                      : theme.textSecondary.withValues(alpha: 0.18),
+                  textDark: _rewardedReady,
+                  theme: theme,
+                  disabled: !_rewardedReady,
+                  onTap: _rewardedReady
+                      ? () {
+                          AdService().showRewarded(
+                            onRewarded: () {
+                              gs.continueAfterGameOver();
+                              setState(() => _rewardedReady = false);
+                              _startTimer();
+                            },
+                          );
+                        }
+                      : () {},
                 ),
+                const SizedBox(height: 10),
                 _overlayBtn(
                   label: 'TRY AGAIN',
                   color: theme.accent,
@@ -326,7 +321,8 @@ class _GameScreenState extends State<GameScreen> {
     required bool         textDark,
     required AppTheme     theme,
     required VoidCallback onTap,
-    bool outlined = false,
+    bool outlined  = false,
+    bool disabled  = false,
   }) {
     return SizedBox(
       width: double.infinity,
@@ -345,11 +341,13 @@ class _GameScreenState extends State<GameScreen> {
           : ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: color,
-                foregroundColor: textDark ? Colors.black : Colors.white,
+                foregroundColor: disabled
+                    ? theme.textSecondary.withValues(alpha: 0.5)
+                    : textDark ? Colors.black : Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
               ),
-              onPressed: onTap,
+              onPressed: disabled ? null : onTap,
               child: Text(label,
                   style: GoogleFonts.spaceMono(
                       fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2)),
