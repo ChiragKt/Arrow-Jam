@@ -1,35 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-/// Manages interstitial and rewarded ads (Android only).
-///
-/// In DEBUG builds, Google's official test IDs are used automatically so ads
-/// load on any device without AdMob registration.
-/// In RELEASE builds, the real Ad Unit IDs are used — make sure the device
-/// is NOT in test mode and the app is linked to your AdMob account.
-///
-/// Wiring:
-///   1. Call `await AdService().init()` once in main().
-///   2. Call `AdService().maybeShowInterstitial(level)` after nextLevel().
-///   3. Call `AdService().showRewarded(onRewarded: () { gs.continueAfterGameOver(); })`
-///      from the "Watch Ad to Continue" button.
 class AdService {
   static final AdService _instance = AdService._();
   factory AdService() => _instance;
   AdService._();
 
-  // ── Ad Unit IDs ───────────────────────────────────────────────────────────
-  // Debug → Google's universal test IDs (load on any device, no AdMob setup needed).
-  // Release → your real Ad Unit IDs from admob.google.com.
-  //
-  // FIX #2: Use `static final` (not `static const`) because kDebugMode is a
-  // runtime value, not a compile-time constant. Using `const` caused the
-  // ternary to always resolve to the same branch, so test IDs were never used
-  // in debug builds (or the file failed to compile entirely).
   static const String _interstitialId =
-      'ca-app-pub-2965683825685047/5214114487';
+      'ca-app-pub-3940256099942544/1033173712'; // Google test interstitial
 
-  static const String _rewardedId = 'ca-app-pub-2965683825685047/5677148916';
+  static const String _rewardedId =
+      'ca-app-pub-3940256099942544/5224354917'; // Google test rewarded
 
   InterstitialAd? _interstitial;
   RewardedAd? _rewarded;
