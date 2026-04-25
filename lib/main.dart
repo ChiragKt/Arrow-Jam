@@ -15,7 +15,9 @@ void main() async {
     const SystemUiOverlayStyle(statusBarColor: Colors.transparent),
   );
   unawaited(SoundService().init());
-  unawaited(AdService().init());
+  // FIX #1: await AdService().init() so MobileAds SDK is fully initialised
+  // before _loadInterstitial() and _loadRewarded() are called.
+  await AdService().init();
   runApp(const ArrowJamApp());
 }
 
