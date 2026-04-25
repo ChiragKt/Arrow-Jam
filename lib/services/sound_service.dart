@@ -1,4 +1,5 @@
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/services.dart';
 
 enum GameSound { tapClear, collision, levelWin }
 
@@ -7,9 +8,11 @@ class SoundService {
   factory SoundService() => _instance;
   SoundService._();
 
-  bool _muted = false;
+  bool _sfxMuted = false;
+  bool _musicMuted = false;
+  bool _hapticsMuted = false;
 
-  // Use a small pool of players per sound so rapid taps don't cut each other off.
+  // ── SFX pool (stacked so rapid taps don't cut each other off) ─────────────
   final _clearPlayers     = <AudioPlayer>[];
   final _collisionPlayers = <AudioPlayer>[];
   final _winPlayers       = <AudioPlayer>[];
@@ -18,11 +21,14 @@ class SoundService {
   int _collisionIdx = 0;
   int _winIdx       = 0;
 
+  // ── Background music ──────────────────────────────────────────────────────
+  AudioPlayer? _musicPlayer;
+  bool _musicReady = false;
+
   bool _ready = false;
 
   Future<void> init() async {
     try {
-      // Pre-create players and cache the sources so first-play latency is low.
       for (int i = 0; i < 4; i++) {
         final p = AudioPlayer();
         await p.setSource(AssetSource('sounds/tap_clear.mp3'));
@@ -42,15 +48,42 @@ class SoundService {
         _winPlayers.add(p);
       }
       _ready = true;
-    } catch (e) {
-      // Assets missing or platform issue — game works silently.
+    } catch (_) {}
+
+    // Background music — silent fail if asset is missing
+    try {
+      _musicPlayer = AudioPlayer();
+      await _musicPlayer!.setSource(AssetSource('sounds/ambient.mp3'));
+      await _musicPlayer!.setVolume(0.35);
+      await _musicPlayer!.setReleaseMode(ReleaseMode.loop);
+      _musicReady = true;
+      if (!_musicMuted) {
+        await _musicPlayer!.resume();
+      }
+    } catch (_) {}
+  }
+
+  // ── Controls ─────────────────────────────────────────────────────────────
+
+  void setSfxMuted(bool muted) => _sfxMuted = muted;
+
+  /// Call whenever `settings.musicEnabled` changes.
+  void setMusicMuted(bool muted) {
+    _musicMuted = muted;
+    if (!_musicReady) return;
+    if (muted) {
+      _musicPlayer?.pause();
+    } else {
+      _musicPlayer?.resume();
     }
   }
 
-  void setMuted(bool muted) => _muted = muted;
+  void setHapticsMuted(bool muted) => _hapticsMuted = muted;
+
+  // ── SFX ──────────────────────────────────────────────────────────────────
 
   Future<void> play(GameSound sound) async {
-    if (_muted || !_ready) return;
+    if (_sfxMuted || !_ready) return;
     try {
       switch (sound) {
         case GameSound.tapClear:
@@ -69,9 +102,30 @@ class SoundService {
           await p.seek(Duration.zero);
           await p.resume();
       }
-    } catch (_) {
-      // Never crash the game over audio.
-    }
+    } catch (_) {}
+  }
+
+  // ── Haptics ───────────────────────────────────────────────────────────────
+
+  Future<void> lightImpact() async {
+    if (_hapticsMuted) return;
+    try {
+      await HapticFeedback.lightImpact();
+    } catch (_) {}
+  }
+
+  Future<void> mediumImpact() async {
+    if (_hapticsMuted) return;
+    try {
+      await HapticFeedback.mediumImpact();
+    } catch (_) {}
+  }
+
+  Future<void> selectionClick() async {
+    if (_hapticsMuted) return;
+    try {
+      await HapticFeedback.selectionClick();
+    } catch (_) {}
   }
 
   Future<void> dispose() async {
@@ -81,6 +135,9 @@ class SoundService {
     _clearPlayers.clear();
     _collisionPlayers.clear();
     _winPlayers.clear();
+    await _musicPlayer?.dispose();
+    _musicPlayer = null;
     _ready = false;
+    _musicReady = false;
   }
 }

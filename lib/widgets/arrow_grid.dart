@@ -250,7 +250,8 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
                           : () {
                               final settings = context.read<SettingsState>();
                               final sound = SoundService();
-                              sound.setMuted(!settings.soundEnabled);
+                              sound.setSfxMuted(!settings.soundEnabled);
+                              sound.setHapticsMuted(!settings.hapticsEnabled);
 
                               final result = widget.gs.tapArrow(arrow.id, () {
                                 if (mounted) setState(() {});
@@ -258,9 +259,11 @@ class _ArrowGridState extends State<ArrowGrid> with TickerProviderStateMixin {
                               if (result == TapResult.cleared) {
                                 _startFly(arrow.id, arrow.direction);
                                 sound.play(GameSound.tapClear);
+                                sound.lightImpact();
                               } else if (result == TapResult.collision) {
                                 _startShake(arrow.id);
                                 sound.play(GameSound.collision);
+                                sound.mediumImpact();
                               }
                               // Play level-win sound when the level is just won
                               if (widget.gs.levelWon) {

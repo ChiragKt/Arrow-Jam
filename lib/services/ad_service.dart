@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -27,13 +26,10 @@ class AdService {
   // runtime value, not a compile-time constant. Using `const` caused the
   // ternary to always resolve to the same branch, so test IDs were never used
   // in debug builds (or the file failed to compile entirely).
-  static const String _interstitialId = kDebugMode
-      ? 'ca-app-pub-3940256099942544/1033173712' // Google test interstitial
-      : 'ca-app-pub-2965683825685047/5214114487'; // your real ID
+  static const String _interstitialId =
+      'ca-app-pub-2965683825685047/5214114487';
 
-  static const String _rewardedId = kDebugMode
-      ? 'ca-app-pub-3940256099942544/5224354917' // Google test rewarded
-      : 'ca-app-pub-2965683825685047/5677148916'; // your real ID
+  static const String _rewardedId = 'ca-app-pub-2965683825685047/5677148916';
 
   InterstitialAd? _interstitial;
   RewardedAd? _rewarded;

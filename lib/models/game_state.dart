@@ -343,17 +343,33 @@ class GameState extends ChangeNotifier {
     final solved = backtrack(0);
     if (!solved) return _fallbackArrows(size);
 
-    final arrows = <Arrow>[];
+    // Build the full arrow list first.
+    final allArrows = <Arrow>[];
     for (int i = 0; i < n; i++) {
-      arrows.add(Arrow(
+      allArrows.add(Arrow(
         id: _nextArrowId++,
         cells: [cells[i]],
         direction: assignment[i]!,
       ));
     }
 
-    if (!_isSolvable(arrows, size)) return _fallbackArrows(size);
-    return arrows;
+    // ── Remove ~20% of cells to create vacant spaces (more complexity) ──────
+    // Removing arrows from a valid DAG-based solvable puzzle keeps it solvable
+    // because fewer arrows means fewer potential blockers.
+    final vacantCount = (n * 0.20).round().clamp(0, n - 2);
+    if (vacantCount > 0) {
+      final indices = List.generate(n, (i) => i)..shuffle(_rng);
+      final toRemove = indices.take(vacantCount).toSet();
+      final pruned = <Arrow>[
+        for (int i = 0; i < allArrows.length; i++)
+          if (!toRemove.contains(i)) allArrows[i],
+      ];
+      // Safety check — should always pass, but be defensive.
+      if (_isSolvable(pruned, size)) return pruned;
+    }
+
+    if (!_isSolvable(allArrows, size)) return _fallbackArrows(size);
+    return allArrows;
   }
 
   bool _isSolvable(List<Arrow> arrows, int size) {
@@ -486,8 +502,9 @@ class GameState extends ChangeNotifier {
       if (_arrows.every((a) => a.cleared)) {
         _levelWon = true;
         _score += 50 + (_level * 20);
-        // Persist: level cleared
+        // Persist: level cleared + highest level reached
         _storage.incrementLevelClears();
+        _storage.maybeUpdateHighestLevel(_level);
       }
       notifyListeners();
       onAnimationDone();
