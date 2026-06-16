@@ -12,6 +12,8 @@ dependencies:
   google_fonts: ^6.1.0
   provider: ^6.1.1
   shared_preferences: ^2.2.2
+  audioplayers: ^6.0.0
+  google_mobile_ads: ^5.1.0  
 
 dev_dependencies:
   flutter_test:
@@ -21,4 +23,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/sounds/
+    - assets/sounds/tap_clear.mp3
+    - assets/sounds/collision.mp3
+    - assets/sounds/level_win.mp3

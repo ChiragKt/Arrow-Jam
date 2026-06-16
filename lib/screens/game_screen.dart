@@ -6,21 +6,23 @@ import '../models/game_state.dart';
 import '../models/settings_state.dart';
 import '../themes/app_themes.dart';
 import '../widgets/arrow_grid.dart';
+import '../services/ad_service.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
-
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
 
 class _GameScreenState extends State<GameScreen> {
   Timer? _timer;
+  bool _rewardedReady = false;
 
   @override
   void initState() {
     super.initState();
     _startTimer();
+    _pollRewardedReady();
   }
 
   @override
@@ -33,22 +35,29 @@ class _GameScreenState extends State<GameScreen> {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       final gs = context.read<GameState>();
-      if (!gs.gameOver && !gs.levelWon) {
-        gs.tick();
-      }
+      if (!gs.gameOver && !gs.levelWon) gs.tick();
+      final ready = AdService().rewardedReady;
+      if (ready != _rewardedReady) setState(() => _rewardedReady = ready);
+    });
+  }
+
+  void _pollRewardedReady() {
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return false;
+      final ready = AdService().rewardedReady;
+      if (ready != _rewardedReady) setState(() => _rewardedReady = ready);
+      return true;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsState>();
-    final theme = AppThemes.byId(settings.themeId);
-    final gs = context.watch<GameState>();
+    final theme    = AppThemes.byId(settings.themeId);
+    final gs       = context.watch<GameState>();
 
-    // Restart timer when next level starts
-    if (gs.levelWon) {
-      _timer?.cancel();
-    }
+    if (gs.levelWon) _timer?.cancel();
 
     return Scaffold(
       body: Container(
@@ -75,12 +84,8 @@ class _GameScreenState extends State<GameScreen> {
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(color: theme.gridLine, width: 1.5),
                             boxShadow: theme.isDark
-                                ? [BoxShadow(
-                                    color: theme.accent.withValues(alpha: 0.12),
-                                    blurRadius: 24, spreadRadius: 2)]
-                                : [BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.08),
-                                    blurRadius: 16)],
+                                ? [BoxShadow(color: theme.accent.withValues(alpha: 0.12), blurRadius: 24, spreadRadius: 2)]
+                                : [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 16)],
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(13),
@@ -93,10 +98,8 @@ class _GameScreenState extends State<GameScreen> {
                   _buildLivesBar(theme, gs),
                 ],
               ),
-              if (gs.levelWon)
-                _buildOverlay(theme, gs, won: true),
-              if (gs.gameOver)
-                _buildOverlay(theme, gs, won: false),
+              if (gs.levelWon) _buildOverlay(theme, gs, won: true),
+              if (gs.gameOver) _buildOverlay(theme, gs, won: false),
             ],
           ),
         ),
@@ -105,49 +108,28 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Widget _buildHUD(AppTheme theme, GameState gs) {
-    final timeRatio = gs.timeRemaining / gs.difficulty.timeSeconds;
+    final timeRatio  = gs.timeRemaining / gs.difficulty.timeSeconds;
     final timerColor = timeRatio > 0.5
         ? theme.accent
-        : timeRatio > 0.25
-            ? const Color(0xFFFFAA00)
-            : Colors.red;
+        : timeRatio > 0.25 ? const Color(0xFFFFAA00) : Colors.red;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Row(
         children: [
-          // Back
           GestureDetector(
-            onTap: () {
-              _timer?.cancel();
-              Navigator.pop(context);
-            },
+            onTap: () { _timer?.cancel(); Navigator.pop(context); },
             child: Icon(Icons.close, color: theme.textSecondary, size: 22),
           ),
           const Spacer(),
-          // Level
-          Text(
-            'LVL ${gs.level}',
-            style: GoogleFonts.spaceMono(
-              color: theme.textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 2,
-            ),
-          ),
+          Text('LVL ${gs.level}',
+            style: GoogleFonts.spaceMono(color: theme.textPrimary, fontSize: 14,
+              fontWeight: FontWeight.w700, letterSpacing: 2)),
           const SizedBox(width: 20),
-          // Timer
           _TimerBadge(seconds: gs.timeRemaining, color: timerColor, theme: theme),
           const Spacer(),
-          // Score
-          Text(
-            '${gs.score}',
-            style: GoogleFonts.spaceMono(
-              color: theme.accent,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          Text('${gs.score}',
+            style: GoogleFonts.spaceMono(color: theme.accent, fontSize: 14, fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -167,9 +149,7 @@ class _GameScreenState extends State<GameScreen> {
               duration: const Duration(milliseconds: 300),
               child: Icon(
                 alive ? Icons.favorite : Icons.favorite_border,
-                color: alive
-                    ? theme.lifeActive
-                    : theme.textSecondary.withValues(alpha: 0.3),
+                color: alive ? theme.lifeActive : theme.textSecondary.withValues(alpha: 0.3),
                 size: 26,
                 shadows: alive && theme.isDark
                     ? [Shadow(color: theme.lifeActive.withValues(alpha: 0.6), blurRadius: 8)]
@@ -183,6 +163,13 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Widget _buildOverlay(AppTheme theme, GameState gs, {required bool won}) {
+    // Award 1 coin per level win
+    if (won) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        context.read<SettingsState>().addCoins(1);
+      });
+    }
+
     return Container(
       color: Colors.black.withValues(alpha: 0.72),
       child: Center(
@@ -200,33 +187,35 @@ class _GameScreenState extends State<GameScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                won ? '✓' : '✕',
-                style: TextStyle(
-                  fontSize: 48,
-                  color: won ? theme.accent : Colors.red,
-                  fontWeight: FontWeight.w100,
-                ),
-              ),
+              Text(won ? '✓' : '✕',
+                style: TextStyle(fontSize: 48,
+                  color: won ? theme.accent : Colors.red, fontWeight: FontWeight.w100)),
               const SizedBox(height: 6),
-              Text(
-                won ? 'CLEARED' : 'GAME OVER',
+              Text(won ? 'CLEARED' : 'GAME OVER',
                 style: GoogleFonts.spaceMono(
                   color: won ? theme.accent : Colors.red,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 3,
-                ),
-              ),
+                  fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: 3)),
               const SizedBox(height: 4),
-              Text(
-                'Score: ${gs.score}',
-                style: GoogleFonts.spaceMono(
-                  color: theme.textSecondary,
-                  fontSize: 12,
+              Text('Score: ${gs.score}',
+                style: GoogleFonts.spaceMono(color: theme.textSecondary, fontSize: 12)),
+
+              if (won) ...[
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('🪙', style: TextStyle(fontSize: 14)),
+                    const SizedBox(width: 4),
+                    Text('+1 coin',
+                      style: GoogleFonts.spaceMono(
+                        color: const Color(0xFFFFCC44), fontSize: 11, fontWeight: FontWeight.w700)),
+                  ],
                 ),
-              ),
+              ],
+
               const SizedBox(height: 22),
+
+              // ── Level won ───────────────────────────────────────────────
               if (won) ...[
                 _overlayBtn(
                   label: 'NEXT LEVEL',
@@ -234,27 +223,57 @@ class _GameScreenState extends State<GameScreen> {
                   textDark: !theme.isDark,
                   theme: theme,
                   onTap: () {
+                    AdService().maybeShowInterstitial(gs.level);
                     gs.nextLevel();
                     _startTimer();
                   },
                 ),
                 const SizedBox(height: 10),
+                _overlayBtn(
+                  label: 'QUIT',
+                  color: Colors.transparent,
+                  textDark: false,
+                  outlined: true,
+                  theme: theme,
+                  onTap: () => Navigator.pop(context),
+                ),
               ],
-              _overlayBtn(
-                label: won ? 'QUIT' : 'TRY AGAIN',
-                color: won ? Colors.transparent : theme.accent,
-                textDark: !theme.isDark && !won,
-                outlined: won,
-                theme: theme,
-                onTap: () {
-                  if (won) {
-                    Navigator.pop(context);
-                  } else {
-                    gs.resetGame();
-                    _startTimer();
-                  }
-                },
-              ),
+
+              // ── Game over ───────────────────────────────────────────────
+              // No "TRY AGAIN" — only Continue (ad) and Quit
+              if (!won) ...[
+                _overlayBtn(
+                  label: _rewardedReady ? '▶  CONTINUE  (AD)' : '⏳  LOADING AD...',
+                  color: _rewardedReady
+                      ? const Color(0xFFFFAA00)
+                      : theme.textSecondary.withValues(alpha: 0.18),
+                  textDark: _rewardedReady,
+                  theme: theme,
+                  disabled: !_rewardedReady,
+                  onTap: _rewardedReady
+                      ? () {
+                          AdService().showRewarded(
+                            onRewarded: () async {
+                              gs.continueAfterGameOver();
+                              setState(() => _rewardedReady = false);
+                              // +5 coins for watching rewarded ad
+                              await context.read<SettingsState>().addCoins(5);
+                              _startTimer();
+                            },
+                          );
+                        }
+                      : () {},
+                ),
+                const SizedBox(height: 10),
+                _overlayBtn(
+                  label: 'QUIT',
+                  color: Colors.transparent,
+                  textDark: false,
+                  outlined: true,
+                  theme: theme,
+                  onTap: () => Navigator.pop(context),
+                ),
+              ],
             ],
           ),
         ),
@@ -269,6 +288,7 @@ class _GameScreenState extends State<GameScreen> {
     required AppTheme theme,
     required VoidCallback onTap,
     bool outlined = false,
+    bool disabled = false,
   }) {
     return SizedBox(
       width: double.infinity,
@@ -281,20 +301,20 @@ class _GameScreenState extends State<GameScreen> {
               ),
               onPressed: onTap,
               child: Text(label,
-                  style: GoogleFonts.spaceMono(
-                      color: theme.textSecondary, fontSize: 12, letterSpacing: 2)),
+                style: GoogleFonts.spaceMono(color: theme.textSecondary, fontSize: 12, letterSpacing: 2)),
             )
           : ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: color,
-                foregroundColor: textDark ? Colors.black : Colors.white,
+                foregroundColor: disabled
+                    ? theme.textSecondary.withValues(alpha: 0.5)
+                    : textDark ? Colors.black : Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
               ),
-              onPressed: onTap,
+              onPressed: disabled ? null : onTap,
               child: Text(label,
-                  style: GoogleFonts.spaceMono(
-                      fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2)),
+                style: GoogleFonts.spaceMono(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2)),
             ),
     );
   }
@@ -321,14 +341,8 @@ class _TimerBadge extends StatelessWidget {
         children: [
           Icon(Icons.timer_outlined, color: color, size: 13),
           const SizedBox(width: 4),
-          Text(
-            '${seconds}s',
-            style: GoogleFonts.spaceMono(
-              color: color,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          Text('${seconds}s',
+            style: GoogleFonts.spaceMono(color: color, fontSize: 13, fontWeight: FontWeight.w700)),
         ],
       ),
     );
